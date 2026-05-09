@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
@@ -33,18 +34,68 @@ public partial class CouncilToolService
     // ── School finder (postcode search) ──────────────────────────────────────
     private async Task<string> FindSchoolsNearPostcodeAsync(string postcode, string phase, CancellationToken ct)
     {
-        var schools = await ScrapeBradfordSchoolsAsync(postcode, schoolName: null, phase, ct);
+        postcode = postcode.Trim().ToUpper();
+
+        // 1. Get user lat/lon and all schools from BSO in parallel
+        var latLonTask  = GetLatLonAsync(postcode, ct);
+        var schoolsTask = ScrapeBradfordSchoolsAsync(postcode, schoolName: null, phase, ct);
+        await Task.WhenAll(latLonTask, schoolsTask);
+
+        var (userLat, userLon) = latLonTask.Result;
+        var schools            = schoolsTask.Result;
 
         if (schools.Count == 0)
-        {
             return $"No schools found near {postcode}. " +
                    "Check Bradford's school finder at https://www.bradford.gov.uk/education-and-skills/find-a-school/schools-finder/";
+
+        // 2. Calculate distances — BSO often omits them, so use postcodes.io bulk lookup
+        if (userLat != 0)
+        {
+            // Collect unique school postcodes from address fields
+            var schoolPostcodes = schools
+                .Select(s => ExtractPostcode(s.Address))
+                .Where(p => !string.IsNullOrEmpty(p))
+                .Distinct()
+                .ToList();
+
+            Dictionary<string, (double lat, double lon)> pcMap = new();
+            if (schoolPostcodes.Count > 0)
+                pcMap = await BulkLookupPostcodesAsync(schoolPostcodes!, ct);
+
+            foreach (var s in schools)
+            {
+                var pc = ExtractPostcode(s.Address);
+                if (pc != null && pcMap.TryGetValue(pc, out var ll))
+                {
+                    var mi = HaversineDistanceMi(userLat, userLon, ll.lat, ll.lon);
+                    s.Distance = $"{mi:F1} mi";
+                }
+                else if (string.IsNullOrEmpty(s.Distance))
+                {
+                    s.Distance = "";
+                }
+            }
         }
 
-        // Use phase filter text for instruction
-        var phaseLabel = string.IsNullOrWhiteSpace(phase) ? "" : $"{phase.Trim()} ";
+        // 3. Sort by distance and apply phase filter
+        var sorted = schools
+            .Where(s => !string.IsNullOrWhiteSpace(s.Name))
+            .OrderBy(s => ParseDistanceValue(s.Distance))
+            .ToList();
 
-        var options = schools.Select((s, i) => new SchoolOption
+        if (!string.IsNullOrWhiteSpace(phase))
+            sorted = sorted.Where(s =>
+                s.Phase.Contains(phase, StringComparison.OrdinalIgnoreCase) ||
+                phase.Contains(s.Phase, StringComparison.OrdinalIgnoreCase) ||
+                s.Name.Contains(phase, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        if (sorted.Count == 0)
+            return $"No {phase?.ToLower()} schools found near {postcode}.";
+
+        var phaseLabel = string.IsNullOrWhiteSpace(phase) ? "" : $"{phase.Trim()} ";
+        var closest    = sorted.FirstOrDefault();
+
+        var options = sorted.Select((s, i) => new SchoolOption
         {
             Number       = i + 1,
             Name         = s.Name,
@@ -63,11 +114,61 @@ public partial class CouncilToolService
         sb.AppendLine(JsonSerializer.Serialize(options));
         sb.AppendLine("[[/SCHOOL_LIST]]");
         sb.AppendLine();
-        sb.AppendLine($"SCHOOL_INSTRUCTION: Found {options.Count} {phaseLabel}schools near {postcode}, sorted by distance. " +
-                      "The UI shows the full scrollable list with Ofsted ratings and distance. " +
-                      "Briefly summarise: how many found, closest school name and distance. " +
-                      "End: \"Scroll to see all — tap any school for full details, or ask me which is best.\"");
+        sb.AppendLine($"SCHOOL_INSTRUCTION: Found {options.Count} {phaseLabel}schools near {postcode}, sorted nearest first. " +
+                      $"Closest: {closest?.Name} ({closest?.Distance}). " +
+                      "The UI shows the full scrollable list with distance and Ofsted rating on each row. " +
+                      "Briefly name the closest 2-3 schools and their Ofsted ratings. " +
+                      "End: \"Scroll through all {options.Count} schools or tap one for full details.\"");
         return sb.ToString();
+    }
+
+    // ── Bulk postcode → lat/lon lookup (postcodes.io) ─────────────────────────
+    private async Task<Dictionary<string, (double lat, double lon)>> BulkLookupPostcodesAsync(
+        List<string> postcodes, CancellationToken ct)
+    {
+        var result = new Dictionary<string, (double, double)>(StringComparer.OrdinalIgnoreCase);
+        if (postcodes.Count == 0) return result;
+
+        try
+        {
+            // postcodes.io bulk accepts up to 100 postcodes per request
+            foreach (var batch in postcodes.Chunk(100))
+            {
+                var body    = JsonSerializer.Serialize(new { postcodes = batch });
+                var content = new StringContent(body, Encoding.UTF8, "application/json");
+                var resp    = await _http.PostAsync("https://api.postcodes.io/postcodes", content, ct);
+                if (!resp.IsSuccessStatusCode) continue;
+
+                var json = await resp.Content.ReadAsStringAsync(ct);
+                using var doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("result", out var arr)) continue;
+
+                foreach (var item in arr.EnumerateArray())
+                {
+                    var query = item.TryGetProperty("query",  out var q) ? q.GetString() ?? "" : "";
+                    var res   = item.TryGetProperty("result", out var r) ? r : default;
+                    if (res.ValueKind != JsonValueKind.Object) continue;
+
+                    if (res.TryGetProperty("latitude",  out var lat) &&
+                        res.TryGetProperty("longitude", out var lon))
+                        result[query] = (lat.GetDouble(), lon.GetDouble());
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Bulk postcode lookup failed: {M}", ex.Message);
+        }
+
+        return result;
+    }
+
+    private static string? ExtractPostcode(string address)
+    {
+        if (string.IsNullOrEmpty(address)) return null;
+        var m = Regex.Match(address,
+            @"\b([A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2})\b", RegexOptions.IgnoreCase);
+        return m.Success ? Regex.Replace(m.Value, @"\s+", " ").Trim().ToUpper() : null;
     }
 
     // ── School details (name search) ─────────────────────────────────────────
@@ -502,4 +603,32 @@ public partial class CouncilToolService
         var s when s.Contains("inadequate")   => "Inadequate",
         var s                                  => s
     };
+
+    // ── Geo helpers ───────────────────────────────────────────────────────────
+    private async Task<(double lat, double lon)> GetLatLonAsync(string postcode, CancellationToken ct)
+    {
+        try
+        {
+            var json = await FetchHtmlAsync(
+                $"https://api.postcodes.io/postcodes/{Uri.EscapeDataString(postcode)}", ct);
+            if (json == null) return (0, 0);
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("result", out var r))
+                return (r.GetProperty("latitude").GetDouble(), r.GetProperty("longitude").GetDouble());
+        }
+        catch { }
+        return (0, 0);
+    }
+
+    private static double HaversineDistanceMi(double lat1, double lon1, double lat2, double lon2)
+    {
+        if (lat2 == 0 && lon2 == 0) return 999;
+        const double R = 3958.8;
+        var dLat = (lat2 - lat1) * Math.PI / 180;
+        var dLon = (lon2 - lon1) * Math.PI / 180;
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+              + Math.Cos(lat1 * Math.PI / 180) * Math.Cos(lat2 * Math.PI / 180)
+              * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+    }
 }

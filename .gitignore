@@ -1,0 +1,39 @@
+# ── Secrets — NEVER commit ───────────────────────────────────────────────────
+**/appsettings.Local.json
+**/appsettings.Development.json
+.env
+.env.local
+*.pfx
+*.p12
+
+# ── .NET build output ─────────────────────────────────────────────────────────
+**/bin/
+**/obj/
+
+# ── Database / SQLite ────────────────────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+
+# ── Qdrant local data ────────────────────────────────────────────────────────
+Database/storage/
+Database/snapshots/
+Database/qdrant.exe
+Database/.qdrant-initialized
+
+# ── Frontend deploy cache ────────────────────────────────────────────────────
+Frontend/.netlify/
+Frontend/.vercel/
+
+# ── Memory / internal Claude files ──────────────────────────────────────────
+.claude/
+
+# ── OS / IDE ─────────────────────────────────────────────────────────────────
+.vs/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.suo
+*.user
+*.log

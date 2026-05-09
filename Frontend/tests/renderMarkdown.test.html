@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>renderMarkdown Unit Tests</title>
+<style>
+  body{font-family:monospace;padding:20px;background:#f8f9fa}
+  .pass{color:#16a34a;font-weight:700}
+  .fail{color:#dc2626;font-weight:700}
+  .test{margin:6px 0;padding:8px 12px;border-radius:6px;background:#fff;border:1px solid #e2e8f0}
+  .test.failed{background:#fef2f2;border-color:#fca5a5}
+  .test.passed{background:#f0fdf4;border-color:#86efac}
+  h1{margin-bottom:16px;font-size:1.2rem}
+  #summary{margin-top:20px;padding:14px;border-radius:8px;font-size:1rem;font-weight:700}
+</style>
+</head>
+<body>
+<h1>renderMarkdown — Unit Tests</h1>
+<div id="results"></div>
+<div id="summary"></div>
+
+<!-- Load the actual renderMarkdown function -->
+<script>
+// Inline esc and renderMarkdown from chat.js for isolated testing
+function esc(t) {
+  return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function inline(t) {
+  return esc(t)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,     '<em>$1</em>')
+    .replace(/`(.+?)`/g,       '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+}
+function renderMarkdown(raw) {
+  const lines = raw.split('\n');
+  let html = '', inOl = false, inUl = false, tableRows = [];
+  const closeOl    = () => { if (inOl) { html += '</ol>'; inOl = false; } };
+  const closeUl    = () => { if (inUl) { html += '</ul>'; inUl = false; } };
+  const flushTable = () => {
+    if (!tableRows.length) return;
+    html += '<div class="tbl-wrap"><table>';
+    let headDone = false;
+    for (const row of tableRows) {
+      if (/^\|[-| :]+\|$/.test(row.trim())) {
+        if (!headDone) { html += '</thead><tbody>'; headDone = true; }
+        continue;
+      }
+      const cells = row.split('|').slice(1, -1).map(c => c.trim());
+      if (!headDone) { html += '<thead><tr>' + cells.map(c=>`<th>${inline(c)}</th>`).join('') + '</tr>'; }
+      else           { html += '<tr>' + cells.map(c=>`<td>${inline(c)}</td>`).join('') + '</tr>'; }
+    }
+    if (!headDone) html += '</thead><tbody>';
+    html += '</tbody></table></div>';
+    tableRows = [];
+  };
+  for (const line of lines) {
+    if (/^\|.+\|$/.test(line.trim())) { closeOl(); closeUl(); tableRows.push(line.trim()); continue; }
+    flushTable();
+    const olMatch = line.match(/^(\d+)\.\s+(.+)/);
+    if (olMatch) { closeUl(); if (!inOl) { html += '<ol>'; inOl = true; } html += `<li><span>${inline(olMatch[2])}</span></li>`; continue; }
+    const ulMatch = line.match(/^[-•*]\s+(.+)/);
+    if (ulMatch) { closeOl(); if (!inUl) { html += '<ul>'; inUl = true; } html += `<li><span>${inline(ulMatch[1])}</span></li>`; continue; }
+    if (!line.trim() && (inOl || inUl)) continue;
+    closeOl(); closeUl();
+    if (line.startsWith('### ')) { html += `<h4>${inline(line.slice(4))}</h4>`; continue; }
+    if (line.startsWith('## '))  { html += `<h3>${inline(line.slice(3))}</h3>`; continue; }
+    if (!line.trim())            { html += '<br/>'; continue; }
+    html += `<p>${inline(line)}</p>`;
+  }
+  flushTable(); closeOl(); closeUl();
+  return html;
+}
+</script>
+
+<script>
+const results = [];
+
+function test(name, fn) {
+  try {
+    fn();
+    results.push({ name, pass: true });
+  } catch (e) {
+    results.push({ name, pass: false, error: e.message });
+  }
+}
+
+function assert(condition, msg) {
+  if (!condition) throw new Error(msg || 'Assertion failed');
+}
+
+function assertContains(html, substring, msg) {
+  if (!html.includes(substring))
+    throw new Error((msg || '') + `\nExpected to contain: "${substring}"\nGot: "${html}"`);
+}
+
+function assertNotContains(html, substring, msg) {
+  if (html.includes(substring))
+    throw new Error((msg || '') + `\nExpected NOT to contain: "${substring}"\nGot: "${html}"`);
+}
+
+// ── BOLD ──
+test('Bold **text** renders as <strong>', () => {
+  assertContains(renderMarkdown('**hello**'), '<strong>hello</strong>');
+});
+
+// ── ITALIC ──
+test('Italic *text* renders as <em>', () => {
+  assertContains(renderMarkdown('*hello*'), '<em>hello</em>');
+});
+
+// ── CODE ──
+test('Inline `code` renders as <code>', () => {
+  assertContains(renderMarkdown('Use `dotnet run`'), '<code>dotnet run</code>');
+});
+
+// ── LINK ──
+test('Markdown link renders as <a> with href', () => {
+  const html = renderMarkdown('[Bradford](https://www.bradford.gov.uk)');
+  assertContains(html, 'href="https://www.bradford.gov.uk"');
+  assertContains(html, 'Bradford');
+});
+
+test('Non-https link is NOT rendered as anchor', () => {
+  const html = renderMarkdown('[Bad](javascript:alert(1))');
+  assertNotContains(html, '<a ');
+});
+
+// ── ORDERED LIST ──
+test('Numbered list renders as <ol>', () => {
+  const html = renderMarkdown('1. First\n2. Second\n3. Third');
+  assertContains(html, '<ol>');
+  assertContains(html, '<li>');
+  assertContains(html, 'First');
+  assertContains(html, 'Third');
+});
+
+test('Ordered list counter preserved across blank line', () => {
+  const html = renderMarkdown('1. First\n\n2. Second');
+  const matches = (html.match(/<li>/g) || []).length;
+  assert(matches === 2, `Expected 2 <li> tags, got ${matches}`);
+  assertContains(html, '<ol>');
+  const closingOls = (html.match(/<\/ol>/g) || []).length;
+  assert(closingOls === 1, `Expected 1 </ol>, got ${closingOls} (blank line split the list)`);
+});
+
+// ── UNORDERED LIST ──
+test('Bullet list renders as <ul>', () => {
+  const html = renderMarkdown('- Apple\n- Banana\n- Cherry');
+  assertContains(html, '<ul>');
+  assertContains(html, 'Apple');
+  assertContains(html, 'Cherry');
+});
+
+// ── HEADINGS ──
+test('## heading renders as <h3>', () => {
+  assertContains(renderMarkdown('## Section'), '<h3>Section</h3>');
+});
+
+test('### heading renders as <h4>', () => {
+  assertContains(renderMarkdown('### Sub'), '<h4>Sub</h4>');
+});
+
+// ── TABLE ──
+test('Markdown table renders <table> with <th> and <td>', () => {
+  const md = '| Band | Annual |\n|------|--------|\n| A | £1,573 |';
+  const html = renderMarkdown(md);
+  assertContains(html, '<table>');
+  assertContains(html, '<th>');
+  assertContains(html, '<td>');
+  assertContains(html, '£1,573');
+});
+
+// ── XSS SAFETY ──
+test('HTML in input is escaped — no XSS via <script>', () => {
+  const html = renderMarkdown('<script>alert(1)</script>');
+  assertNotContains(html, '<script>');
+  assertContains(html, '&lt;script&gt;');
+});
+
+test('HTML in bold is escaped', () => {
+  const html = renderMarkdown('**<img onerror=alert(1)>**');
+  assertNotContains(html, '<img');
+  assertContains(html, '&lt;img');
+});
+
+// ── PLAIN TEXT ──
+test('Plain text wrapped in <p>', () => {
+  assertContains(renderMarkdown('Hello world'), '<p>Hello world</p>');
+});
+
+test('Empty string returns empty string', () => {
+  assert(renderMarkdown('') === '', 'Empty input should return empty string');
+});
+
+// ── RENDER RESULTS ──
+const container = document.getElementById('results');
+let passed = 0, failed = 0;
+
+results.forEach(r => {
+  const div = document.createElement('div');
+  div.className = 'test ' + (r.pass ? 'passed' : 'failed');
+  div.innerHTML = r.pass
+    ? `<span class="pass">PASS</span> ${r.name}`
+    : `<span class="fail">FAIL</span> ${r.name}<br/><small style="color:#dc2626">${r.error}</small>`;
+  container.appendChild(div);
+  r.pass ? passed++ : failed++;
+});
+
+const summary = document.getElementById('summary');
+summary.style.background = failed === 0 ? '#f0fdf4' : '#fef2f2';
+summary.style.border = `2px solid ${failed === 0 ? '#86efac' : '#fca5a5'}`;
+summary.style.color = failed === 0 ? '#16a34a' : '#dc2626';
+summary.textContent = failed === 0
+  ? `All ${passed} tests passed`
+  : `${failed} failed, ${passed} passed`;
+</script>
+</body>
+</html>

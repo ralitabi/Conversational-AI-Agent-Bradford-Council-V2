@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Bradford Council</title>
+<!-- Auth guard — redirect to login before anything renders -->
+<script src="auth.js"></script>
+<script>if (!isAuthenticated()) { window.location.replace('login.html'); }</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- ▓▓▓ NAVBAR ▓▓▓ -->
+<nav class="navbar">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">
+      <img src="https://www.bradford.gov.uk/css/2025/images/crest.svg" alt="Bradford Council" class="nav-crest"/>
+    </a>
+    <form class="nav-search" action="https://www.bradford.gov.uk/search-results" method="get" target="_blank">
+      <div class="search-wrap">
+        <input type="text" name="query" placeholder="Search our services" autocomplete="off"/>
+        <button type="submit" aria-label="Search">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="#666" d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z"/></svg>
+        </button>
+      </div>
+    </form>
+    <a href="#" class="nav-login btn-blue">Register | Log on</a>
+  </div>
+</nav>
+
+<!-- ▓▓▓ BANNER ▓▓▓ -->
+<section class="banner">
+  <img src="https://www.bradford.gov.uk/media/0fkoeq13/city-hall.jpg" alt="Bradford City Hall" class="banner-img"/>
+  <div class="banner-caption">
+    <h1>City of Bradford Metropolitan District Council</h1>
+  </div>
+</section>
+
+<!-- ▓▓▓ TOP ICONS ▓▓▓ -->
+<section class="top-icons">
+  <ul>
+    <li>
+      <a href="https://www.bradford.gov.uk/recycling-and-waste/bin-collections/check-your-bin-collection-dates/" target="_blank">
+        <span class="icon-wrap">
+          <img src="https://www.bradford.gov.uk/media/tdtlwvga/waste-collection-dates.svg" alt=""
+               onload="this.nextElementSibling.style.display='none'"
+               onerror="this.style.display='none'"/>
+          <svg class="icon-fallback" viewBox="0 0 64 64" fill="none" stroke="#005192" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="14" y="22" width="36" height="30" rx="3"/><path d="M20 22v-6a2 2 0 0 1 2-2h20a2 2 0 0 1 2 2v6"/>
+            <line x1="14" y1="31" x2="50" y2="31"/><line x1="26" y1="38" x2="26" y2="44"/><line x1="38" y1="38" x2="38" y2="44"/>
+          </svg>
+        </span>
+        <p>Check your bin dates</p>
+      </a>
+    </li>
+    <li>
+      <a href="https://www.bradford.gov.uk/jobs/apply-for-a-council-job/job-vacancies/" target="_blank">
+        <span class="icon-wrap">
+          <img src="https://www.bradford.gov.uk/media/v1airgzo/job-vacancies.svg" alt=""
+               onload="this.nextElementSibling.style.display='none'"
+               onerror="this.style.display='none'"/>
+          <svg class="icon-fallback" viewBox="0 0 64 64" fill="none" stroke="#005192" stroke-width="2.5" stroke-linecap="round">
+            <circle cx="32" cy="20" r="10"/><path d="M10 54c0-12 9.8-20 22-20s22 8 22 20"/>
+            <rect x="22" y="38" width="20" height="14" rx="2"/><line x1="22" y1="45" x2="42" y2="45"/>
+          </svg>
+        </span>
+        <p>Council vacancies</p>
+      </a>
+    </li>
+    <li>
+      <a href="https://www.bradford.gov.uk/paying-for-services/i-want-to-pay-for/i-want-to-pay-for/" target="_blank">
+        <span class="icon-wrap">
+          <img src="https://www.bradford.gov.uk/media/404nraba/payment-information.svg" alt=""
+               onload="this.nextElementSibling.style.display='none'"
+               onerror="this.style.display='none'"/>
+          <svg class="icon-fallback" viewBox="0 0 64 64" fill="none" stroke="#005192" stroke-width="2.5" stroke-linecap="round">
+            <rect x="8" y="18" width="48" height="28" rx="4"/>
+            <line x1="8" y1="27" x2="56" y2="27"/><rect x="14" y="34" width="14" height="6" rx="2"/>
+            <line x1="38" y1="37" x2="50" y2="37"/>
+          </svg>
+        </span>
+        <p>Online payments</p>
+      </a>
+    </li>
+    <li>
+      <a href="https://www.bradford.gov.uk/contact-us/contact-us-now/contact-us-now/" target="_blank">
+        <span class="icon-wrap">
+          <img src="https://www.bradford.gov.uk/media/lycdiwxw/report2.svg" alt=""
+               onload="this.nextElementSibling.style.display='none'"
+               onerror="this.style.display='none'"/>
+          <svg class="icon-fallback" viewBox="0 0 64 64" fill="none" stroke="#005192" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 10h32a4 4 0 0 1 4 4v22a4 4 0 0 1-4 4H22l-10 8V14a4 4 0 0 1 4-4z"/>
+            <line x1="24" y1="23" x2="40" y2="23"/><line x1="24" y1="31" x2="36" y2="31"/>
+          </svg>
+        </span>
+        <p>Report a problem</p>
+      </a>
+    </li>
+    <li>
+      <a href="https://www.bradford.gov.uk/emergencies/council-service-disruptions/bank-holiday-closure-times/" target="_blank">
+        <span class="icon-wrap">
+          <img src="https://www.bradford.gov.uk/media/l1kk3eov/bank-holidays.svg" alt=""
+               onload="this.nextElementSibling.style.display='none'"
+               onerror="this.style.display='none'"/>
+          <svg class="icon-fallback" viewBox="0 0 64 64" fill="none" stroke="#005192" stroke-width="2.5" stroke-linecap="round">
+            <circle cx="32" cy="34" r="18"/><line x1="32" y1="22" x2="32" y2="34"/><line x1="32" y1="34" x2="42" y2="44"/>
+            <path d="M20 12h24M32 12v6"/>
+          </svg>
+        </span>
+        <p>Bank holiday opening times</p>
+      </a>
+    </li>
+    <li>
+      <a href="https://www.bradford.gov.uk/your-council/elections-and-voting/district-council-elections-2026/" target="_blank">
+        <span class="icon-wrap">
+          <img src="https://www.bradford.gov.uk/media/mxtjxnte/elections-voting.svg" alt=""
+               onload="this.nextElementSibling.style.display='none'"
+               onerror="this.style.display='none'"/>
+          <svg class="icon-fallback" viewBox="0 0 64 64" fill="none" stroke="#005192" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="10" y="14" width="44" height="36" rx="3"/>
+            <path d="M22 32l8 8 16-16"/>
+            <line x1="10" y1="24" x2="54" y2="24"/>
+          </svg>
+        </span>
+        <p>District Council Elections 2026</p>
+      </a>
+    </li>
+  </ul>
+</section>
+
+<!-- ▓▓▓ TOP TASKS ▓▓▓ -->
+<section class="top-tasks">
+  <ul class="tasks-grid">
+    <li class="task-item">
+      <a href="https://www.bradford.gov.uk/benefits/benefits/" class="task-head" target="_blank"><h2>Benefits</h2></a>
+      <ul class="task-links">
+        <li><a href="https://www.bradford.gov.uk/benefits/applying-for-benefits/housing-benefit-and-council-tax-reduction/" target="_blank">Housing Benefit and Council Tax Reduction</a></li>
+        <li><a href="https://www.bradford.gov.uk/benefits/myinfo/myinfo/" target="_blank">MyInfo</a></li>
+        <li><a href="https://www.bradford.gov.uk/benefits/applying-for-benefits/what-benefits-are-available/" target="_blank">What benefits are available?</a></li>
+      </ul>
+    </li>
+    <li class="task-item">
+      <a href="https://www.bradford.gov.uk/births-deaths-and-marriages/" class="task-head" target="_blank"><h2>Births, deaths and marriages</h2></a>
+      <ul class="task-links">
+        <li><a href="https://www.bradford.gov.uk/births-deaths-and-marriages/certificates/order-a-certificate/" target="_blank">Get a copy certificate</a></li>
+        <li><a href="https://www.bradford.gov.uk/births-deaths-and-marriages/marriages-and-civil-partnerships/" target="_blank">Marriages and Civil Partnerships</a></li>
+        <li><a href="https://www.bradford.gov.uk/births-deaths-and-marriages/register-a-birth/" target="_blank">Register a birth</a></li>
+      </ul>
+    </li>
+    <li class="task-item">
+      <a href="https://www.bradford.gov.uk/children-young-people-and-families/" class="task-head" target="_blank"><h2>Children, young people and families</h2></a>
+      <ul class="task-links">
+        <li><a href="https://www.bradford.gov.uk/children-young-people-and-families/send-and-inclusion/bradfordlocaloffer/" target="_blank">Bradford's SEND Local Offer</a></li>
+        <li><a href="https://www.bradford.gov.uk/children-young-people-and-families/childcare-and-early-years/" target="_blank">Looking for early education and childcare</a></li>
+        <li><a href="https://www.bradford.gov.uk/children-young-people-and-families/children-social-care/talk-to-us/" target="_blank">Talk to us about a child</a></li>
+      </ul>
+    </li>
+    <li class="task-item">
+      <a href="https://www.bradford.gov.uk/clean-air-zone/" class="task-head" target="_blank"><h2>Clean Air Zone</h2></a>
+      <ul class="task-links">
+        <li><a href="https://www.bradford.gov.uk/clean-air-zone/pay-or-challenge-a-clean-air-zone-charge/how-to-pay-the-caz-penalty-charge-notice/" target="_blank">How to pay the CAZ penalty charge</a></li>
+        <li><a href="https://www.bradford.gov.uk/clean-air-zone/pay-or-challenge-a-clean-air-zone-charge/how-to-pay-the-daily-caz-charge/" target="_blank">How to pay the daily CAZ charge</a></li>
+        <li><a href="https://www.bradford.gov.uk/clean-air-zone/about-the-clean-air-zone/where-is-the-clean-air-zone/" target="_blank">Where is the Clean Air Zone?</a></li>
+      </ul>
+    </li>
+    <li class="task-item">
+      <a href="https://www.bradford.gov.uk/council-tax/" class="task-head" target="_blank"><h2>Council Tax</h2></a>
+      <ul class="task-links">
+        <li><a href="https://www.bradford.gov.uk/council-tax/pay-your-council-tax/" target="_blank">Pay your Council Tax</a></li>
+        <li><a href="https://www.bradford.gov.uk/council-tax/discounts-and-exemptions/" target="_blank">Reduce your bill</a></li>
+        <li><a href="https://www.bradford.gov.uk/council-tax/contact-us-about-council-tax/" target="_blank">Report a change or ask a question</a></li>
+      </ul>
+    </li>
+    <li class="task-item">
+      <a href="https://www.bradford.gov.uk/education-and-skills/" class="task-head" target="_blank"><h2>Education and skills</h2></a>
+      <ul class="task-links">
+        <li><a href="https://www.bradford.gov.uk/education-and-skills/schools/apply-for-a-school-place/" target="_blank">Apply for a place at school</a></li>
+        <li><a href="https://www.bradford.gov.uk/education-and-skills/schools/school-closures-and-emergency-closures/" target="_blank">School closures</a></li>
+        <li><a href="https://www.bradford.gov.uk/education-and-skills/schools/find-a-school/" target="_blank">Schools finder</a></li>
+      </ul>
+    </li>
+    <li class="task-item">
+      <a href="https://www.bradford.gov.uk/libraries/" class="task-head" target="_blank"><h2>Libraries</h2></a>
+      <ul class="task-links">
+        <li><a href="https://www.bradford.gov.uk/libraries/find-a-library/" target="_blank">Find your local library</a></li>
+        <li><a href="https://capitadiscovery.co.uk/bradford/" target="_blank">Log in to your library account</a></li>
+        <li><a href="https://capitadiscovery.co.uk/bradford/" target="_blank">Renew, borrow and reserve items</a></li>
+      </ul>
+    </li>
+    <li class="task-item">
+      <a href="https://www.bradford.gov.uk/parking-roads-and-transport/" class="task-head" target="_blank"><h2>Parking, roads and transport</h2></a>
+      <ul class="task-links">
+        <li><a href="https://www.bradford.gov.uk/parking-roads-and-transport/roads-and-footways/roadworks/" target="_blank">Map of roadworks</a></li>
+        <li><a href="https://www.bradford.gov.uk/parking-roads-and-transport/parking/parking-permits-residents/" target="_blank">Parking permits</a></li>
+        <li><a href="https://www.bradford.gov.uk/parking-roads-and-transport/parking/pay-or-challenge-a-parking-fine/" target="_blank">Pay a parking or bus lane fine</a></li>
+      </ul>
+    </li>
+    <li class="task-item">
+      <a href="https://www.bradford.gov.uk/recycling-and-waste/" class="task-head" target="_blank"><h2>Recycling and waste</h2></a>
+      <ul class="task-links">
+        <li><a href="https://www.bradford.gov.uk/recycling-and-waste/bin-collections/check-your-bin-collection-dates/" target="_blank">Check your bin collection dates</a></li>
+        <li><a href="https://www.bradford.gov.uk/recycling-and-waste/garden-waste/garden-waste-collection-service/" target="_blank">Garden waste collection service</a></li>
+        <li><a href="https://www.bradford.gov.uk/recycling-and-waste/bin-collections/damaged-or-missing-bins/" target="_blank">New bins or repairs</a></li>
+      </ul>
+    </li>
+  </ul>
+  <div class="more-btn-wrap">
+    <a href="https://www.bradford.gov.uk/site-navigation" class="btn-blue more-btn" target="_blank">More Services …</a>
+  </div>
+</section>
+
+<!-- ▓▓▓ STAY CONNECTED ▓▓▓ -->
+<section class="signup">
+  <div class="signup-icon">
+    <img src="https://www.bradford.gov.uk/css/2025/images/govDelivery.svg" alt="" width="100" onerror="this.style.display='none'"/>
+  </div>
+  <div class="signup-text">
+    <h2>Stay Connected</h2>
+    <p>Sign up for our Stay Connected emails and get the information that matters to you most in your inbox.</p>
+  </div>
+  <div class="signup-form">
+    <form onsubmit="return false">
+      <label for="sc-email">Email address</label>
+      <input type="email" id="sc-email" placeholder="Your email address"/>
+      <button type="submit" class="btn-blue">Send</button>
+    </form>
+  </div>
+</section>
+
+<!-- ▓▓▓ OTHER SITES ▓▓▓ -->
+<section class="other-sites">
+  <ul>
+    <li><a href="https://www.bradfordcityofculture25.com/" target="_blank">
+      <img src="https://www.bradford.gov.uk/css/2025/images/otherWhatson.jpg" alt="What's on" onerror="this.style.background='#1a3f6f'"/>
+      <p>What's on</p>
+    </a></li>
+    <li><a href="https://www.bradford.gov.uk/about-bradford-council/news/" target="_blank">
+      <img src="https://www.bradford.gov.uk/css/2025/images/otherNews.jpg" alt="Bradford news" onerror="this.style.background='#1c6166'"/>
+      <p>Bradford news</p>
+    </a></li>
+    <li><a href="https://www.visitbradford.com/" target="_blank">
+      <img src="https://www.bradford.gov.uk/css/2025/images/otherVisit.jpg" alt="Visit Bradford" onerror="this.style.background='#AA4E0F'"/>
+      <p>Visit Bradford</p>
+    </a></li>
+    <li><a href="https://www.bradfordtheatres.co.uk/" target="_blank">
+      <img src="https://www.bradford.gov.uk/css/2025/images/otherTheatres.jpg" alt="Bradford Theatres" onerror="this.style.background='#333'"/>
+      <p>Bradford Theatres</p>
+    </a></li>
+  </ul>
+</section>
+
+<!-- ▓▓▓ FOOTER ▓▓▓ -->
+<footer>
+  <div class="footer-top">
+    <a href="https://www.bradford.gov.uk/contact-us/" class="btn-black" target="_blank">Contact us now</a>
+    <div class="footer-social">
+      <a href="https://www.facebook.com/bradfordmdc" target="_blank" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="white" width="26"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+      <a href="https://x.com/bradfordmdc" target="_blank" aria-label="X"><svg viewBox="0 0 24 24" fill="white" width="26"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
+      <a href="https://www.whatsapp.com/channel/0029VaIlkgqBqbr47t1fFy3P" target="_blank" aria-label="WhatsApp"><svg viewBox="0 0 24 24" fill="white" width="26"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg></a>
+      <a href="https://www.instagram.com/bradfordmdc/" target="_blank" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="26"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1.5" fill="white" stroke="none"/></svg></a>
+      <a href="https://www.linkedin.com/company/bradford-council/" target="_blank" aria-label="LinkedIn"><svg viewBox="0 0 24 24" fill="white" width="26"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6zM2 9h4v12H2z"/><circle cx="4" cy="4" r="2"/></svg></a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <ul class="footer-links">
+      <li><a href="#">Cookies</a></li>
+      <li><a href="#">Privacy Notice</a></li>
+      <li><a href="#">A to Z</a></li>
+      <li><a href="#">Accessibility Statement</a></li>
+    </ul>
+    <img src="https://www.bradford.gov.uk/css/2025/images/crest.svg" alt="Bradford Council" class="footer-crest"/>
+    <p class="footer-copy">Copyright 2026 City of Bradford Metropolitan District Council</p>
+  </div>
+</footer>
+
+<!-- ████████████████████████████████████████
+     AI CHAT WIDGET
+████████████████████████████████████████ -->
+
+<div id="backdrop" onclick="chatClose()" aria-hidden="true"></div>
+
+<!-- FAB -->
+<button id="fab" onclick="chatOpen()" aria-label="Open Bradford Council chat assistant">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+  Ask Alex
+  <span class="fab-ping"></span>
+</button>
+
+<!-- Chat modal -->
+<div id="chat-modal" role="dialog" aria-modal="true" aria-label="Bradford Council Assistant" aria-labelledby="ch-name-id">
+  <div id="chat-panel">
+
+    <!-- Header — light gradient (matches React from-[#f0f6ff] to-white) -->
+    <header id="chat-header">
+      <div class="ch-left">
+        <!-- Dark blue rounded-square avatar (matches React rounded-xl bg-[#0f4ca3]) -->
+        <div class="ch-avatar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19c1.4-3 4-4.5 6.5-4.5S17 16 18.5 19"/></svg>
+        </div>
+        <div class="ch-info">
+          <div class="ch-name-row">
+            <span class="ch-name" id="ch-name-id">Bradford Council Assistant</span>
+            <div class="online-dot"></div>
+          </div>
+          <span class="ch-subtitle">Live guidance &amp; service support</span>
+        </div>
+      </div>
+      <div class="ch-actions">
+        <button class="ch-logout" onclick="doLogout()" aria-label="Sign out" title="Sign out">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+        <button class="ch-settings" onclick="openSettings()" aria-label="Settings" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <button class="ch-new" onclick="chatClear()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Restart
+        </button>
+        <button class="ch-close" onclick="chatClose()" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Settings panel (populated by JS) -->
+    <div id="settings-panel"></div>
+
+    <!-- Messages (bg-[#f5f7fb]) -->
+    <div id="chat-msgs" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat messages">
+      <div class="date-chip">Today</div>
+
+      <!-- Intro bubble 1: title + body + time inside (matches React introMessages) -->
+      <div class="msg-row alex-row">
+        <div class="alex-ava">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#0f4ca3" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19c1.4-3 4-4.5 6.5-4.5S17 16 18.5 19"/></svg>
+        </div>
+        <div class="intro-bubble">
+          <p class="intro-title">Hello, welcome to Bradford Council Assistant.</p>
+          <p class="intro-body">I can help you find the right council service, explain the next steps, and guide you to the correct contact or online page.</p>
+          <span class="intro-time">Just now</span>
+        </div>
+      </div>
+
+      <!-- Intro bubble 2 -->
+      <div class="msg-row alex-row">
+        <div class="alex-ava">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#0f4ca3" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19c1.4-3 4-4.5 6.5-4.5S17 16 18.5 19"/></svg>
+        </div>
+        <div class="intro-bubble">
+          <p class="intro-title">What would you like help with today?</p>
+          <p class="intro-body">Choose one of the service areas below, or type your question.</p>
+          <span class="intro-time">Just now</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Service chips (rounded-full pills, matches React starterQueries) -->
+    <!-- Suggestion chips — quick examples, input always open -->
+    <div id="chat-chips">
+      <p class="chips-label">Try asking…</p>
+      <div class="chips-wrap">
+        <button onclick="usechip(this)">When is my bin collected?</button>
+        <button onclick="usechip(this)">Find my nearest library</button>
+        <button onclick="usechip(this)">What is my council tax band?</button>
+        <button onclick="usechip(this)">How do I pay council tax?</button>
+        <button onclick="usechip(this)">Apply for housing benefit</button>
+        <button onclick="usechip(this)">Check a planning application</button>
+        <button onclick="usechip(this)">Apply for a Blue Badge</button>
+      </div>
+    </div>
+
+    <!-- Input — always open, ask anything -->
+    <div id="chat-input-wrap">
+      <div id="chat-input-box">
+        <textarea id="chat-input"
+          placeholder="Ask me anything about Bradford Council…"
+          rows="1" onkeydown="onKey(event)" oninput="onType(this)"></textarea>
+        <button id="chat-send" disabled onclick="doSend()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="19" height="19"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
+        </button>
+      </div>
+      <p id="chat-note">Press <kbd>Enter</kbd> to send</p>
+    </div>
+
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="chat.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Sign In — Bradford Council</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--blue:#005192;--blue2:#0f4ca3;--orange:#F26C11}
+html{height:100%}
+body{
+  font-family:'Montserrat',sans-serif;
+  min-height:100vh;
+  background:#f0f0f0;
+  display:flex;flex-direction:column;
+}
+
+/* ── Navbar ── */
+.navbar{
+  background:#fff;
+  border-bottom:3px solid var(--blue);
+  padding:10px 40px;
+  display:flex;align-items:center;
+  flex-shrink:0;
+}
+.nav-crest{height:44px;width:auto;display:block}
+
+/* ── Page body ── */
+.page{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:32px 20px;
+}
+
+/* ── Card ── */
+.card{
+  background:#fff;
+  border-top:4px solid var(--blue);
+  border-radius:4px;
+  box-shadow:0 2px 16px rgba(0,0,0,.12);
+  width:100%;max-width:440px;
+  padding:40px 40px 36px;
+}
+@media(max-width:500px){.card{padding:28px 22px 24px}}
+
+.card-icon{
+  width:56px;height:56px;border-radius:16px;
+  background:var(--blue);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 22px;
+  box-shadow:0 4px 14px rgba(0,81,146,.35);
+}
+.card-title{
+  font-size:1.35rem;font-weight:700;color:var(--blue);
+  text-align:center;margin-bottom:6px;
+}
+.card-sub{
+  font-size:.84rem;color:#666;text-align:center;
+  margin-bottom:32px;line-height:1.5;
+}
+
+/* ── Form ── */
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:18px}
+.field label{font-size:.82rem;font-weight:600;color:#333}
+.field-wrap{position:relative}
+.field input{
+  width:100%;
+  border:2px solid #ccc;border-radius:4px;
+  padding:11px 14px;
+  font-family:'Montserrat',sans-serif;font-size:.92rem;
+  outline:none;transition:border-color .2s,box-shadow .2s;
+  color:#222;background:#fff;
+}
+.field input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,81,146,.12)}
+.field input.error{border-color:#dc2626}
+
+/* password toggle */
+.pw-toggle{
+  position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  background:none;border:none;cursor:pointer;color:#999;
+  display:flex;align-items:center;padding:4px;
+  transition:color .15s;
+}
+.pw-toggle:hover{color:var(--blue)}
+.field input[type=password],.field input[type=text]{padding-right:42px}
+
+/* ── Error ── */
+.error-msg{
+  background:#fef2f2;border:1.5px solid #fca5a5;border-radius:4px;
+  padding:10px 14px;font-size:.82rem;color:#dc2626;font-weight:500;
+  margin-bottom:18px;display:none;align-items:center;gap:8px;
+}
+.error-msg.show{display:flex}
+
+/* ── Button ── */
+.btn-login{
+  width:100%;background:var(--blue);color:#fff;
+  border:none;border-radius:4px;
+  padding:13px;
+  font-family:'Montserrat',sans-serif;font-size:.95rem;font-weight:700;
+  cursor:pointer;transition:background .2s,transform .1s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  margin-top:4px;
+}
+.btn-login:hover{background:#003f7a}
+.btn-login:active{transform:scale(.98)}
+.btn-login:disabled{background:#9ab3cc;cursor:not-allowed;transform:none}
+
+.spinner{
+  width:18px;height:18px;
+  border:2.5px solid rgba(255,255,255,.3);
+  border-top-color:#fff;border-radius:50%;
+  animation:spin .7s linear infinite;display:none;
+}
+.btn-login.loading .btn-text{display:none}
+.btn-login.loading .spinner{display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Footer hint ── */
+.card-footer{
+  margin-top:24px;font-size:.75rem;color:#999;
+  text-align:center;line-height:1.6;
+  border-top:1px solid #f0f0f0;padding-top:16px;
+}
+
+/* ── Page footer ── */
+.footer{
+  background:#000;padding:14px 40px;
+  font-size:.75rem;color:#666;
+  text-align:center;flex-shrink:0;
+}
+</style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar">
+  <img src="https://www.bradford.gov.uk/css/2025/images/crest.svg"
+       alt="Bradford Council" class="nav-crest"
+       onerror="this.style.display='none'"/>
+</nav>
+
+<!-- Login card -->
+<main class="page">
+  <div class="card" role="main">
+
+    <div class="card-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" width="28" height="28">
+        <path d="M12 14c-4 0-6 2-6 4"/>
+        <circle cx="12" cy="8" r="4"/>
+        <rect x="11" y="13" width="2" height="8" rx="1"/>
+        <path d="M18 17l2 2 4-4" stroke-width="2.2"/>
+      </svg>
+    </div>
+
+    <h1 class="card-title">Bradford Council Staff Portal</h1>
+    <p class="card-sub">Enter your credentials to access the AI Assistant</p>
+
+    <div class="error-msg" id="errMsg" role="alert">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" flex-shrink="0">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span id="errText">Incorrect username or password.</span>
+    </div>
+
+    <form id="loginForm" novalidate>
+      <div class="field">
+        <label for="username">Username</label>
+        <div class="field-wrap">
+          <input type="text" id="username" name="username"
+                 placeholder="Enter your username"
+                 autocomplete="username" autocapitalize="none"
+                 spellcheck="false"/>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <div class="field-wrap">
+          <input type="password" id="password" name="password"
+                 placeholder="Enter your password"
+                 autocomplete="current-password"/>
+          <button type="button" class="pw-toggle" id="pwToggle" aria-label="Show password">
+            <svg id="eyeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-login" id="loginBtn">
+        <span class="btn-text">Sign In</span>
+        <div class="spinner"></div>
+      </button>
+    </form>
+
+    <div class="card-footer">
+      Bradford Council Metropolitan District &nbsp;·&nbsp; Staff Access Only<br/>
+      For access issues contact your IT administrator
+    </div>
+
+  </div>
+</main>
+
+<!-- Footer -->
+<footer class="footer">
+  &copy; 2026 City of Bradford Metropolitan District Council
+</footer>
+
+<script src="auth.js"></script>
+<script>
+  // Already logged in → skip login page
+  if (isAuthenticated()) {
+    window.location.replace('index.html');
+  }
+
+  const form     = document.getElementById('loginForm');
+  const btnLogin = document.getElementById('loginBtn');
+  const errMsg   = document.getElementById('errMsg');
+  const errText  = document.getElementById('errText');
+  const pwInput  = document.getElementById('password');
+  const pwToggle = document.getElementById('pwToggle');
+  const eyeIcon  = document.getElementById('eyeIcon');
+
+  // Password show/hide
+  pwToggle.addEventListener('click', () => {
+    const show = pwInput.type === 'password';
+    pwInput.type = show ? 'text' : 'password';
+    eyeIcon.innerHTML = show
+      ? `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>`
+      : `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+    pwToggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  });
+
+  // Form submit
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const user = document.getElementById('username').value.trim();
+    const pass = document.getElementById('password').value;
+
+    // Clear previous errors
+    errMsg.classList.remove('show');
+    document.getElementById('username').classList.remove('error');
+    document.getElementById('password').classList.remove('error');
+
+    if (!user || !pass) {
+      showError('Please enter both username and password.');
+      return;
+    }
+
+    // Short loading state
+    btnLogin.classList.add('loading');
+    btnLogin.disabled = true;
+    await new Promise(r => setTimeout(r, 600));
+
+    if (doLogin(user, pass)) {
+      window.location.replace('index.html');
+    } else {
+      btnLogin.classList.remove('loading');
+      btnLogin.disabled = false;
+      showError('Incorrect username or password. Please try again.');
+      document.getElementById('username').classList.add('error');
+      document.getElementById('password').classList.add('error');
+      document.getElementById('password').value = '';
+      document.getElementById('password').focus();
+    }
+  });
+
+  function showError(msg) {
+    errText.textContent = msg;
+    errMsg.classList.add('show');
+  }
+
+  // Auto-focus username
+  document.getElementById('username').focus();
+</script>
+</body>
+</html>

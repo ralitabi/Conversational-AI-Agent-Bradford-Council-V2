@@ -1,0 +1,11 @@
+[build]
+dockerfilePath = "Api/Dockerfile"
+
+[deploy]
+startCommand = "dotnet /app/Api.dll"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+
+# Mount a Railway volume at /data to persist the SQLite database across redeploys.
+# In Railway dashboard: New Volume → mount path /data → attach to this service.
+# Then set environment variable: ConnectionStrings__Default=Data Source=/data/agent.db

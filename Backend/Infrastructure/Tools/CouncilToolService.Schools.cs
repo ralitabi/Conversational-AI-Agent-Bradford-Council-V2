@@ -383,7 +383,7 @@ public partial class CouncilToolService
                     // Log first data row so we can see actual cell values
                     if (r == 1)
                         _logger.LogInformation("BSO row1 cells: [{C}]",
-                            string.Join(" | ", cells.Select(c => CleanText(c.InnerText)).Take(8)));
+                            string.Join(" | ", cells.Select(c => $"'{CellText(c)}'").Take(8)));
 
                     var school = new SchoolData();
 
@@ -410,26 +410,34 @@ public partial class CouncilToolService
                     if (string.IsNullOrEmpty(school.Name)) continue;
 
                     // Fill other fields from header-mapped columns first
-                    if (hAddr   >= 0 && hAddr   < cells.Count) school.Address      = CleanText(cells[hAddr].InnerText);
-                    if (hType   >= 0 && hType   < cells.Count) school.Type         = CleanText(cells[hType].InnerText);
-                    if (hPhase  >= 0 && hPhase  < cells.Count) school.Phase        = CleanText(cells[hPhase].InnerText);
-                    if (hOfsted >= 0 && hOfsted < cells.Count) school.OfstedRating = NormaliseOfstedLabel(CleanText(cells[hOfsted].InnerText));
-                    if (hAge    >= 0 && hAge    < cells.Count) school.AgeRange     = CleanText(cells[hAge].InnerText);
-                    if (hDist   >= 0 && hDist   < cells.Count) school.Distance     = FormatDistance(CleanText(cells[hDist].InnerText));
+                    if (hAddr   >= 0 && hAddr   < cells.Count) school.Address      = CellText(cells[hAddr]);
+                    if (hType   >= 0 && hType   < cells.Count) school.Type         = CellText(cells[hType]);
+                    if (hPhase  >= 0 && hPhase  < cells.Count) school.Phase        = CellText(cells[hPhase]);
+                    if (hOfsted >= 0 && hOfsted < cells.Count) school.OfstedRating = NormaliseOfstedLabel(CellText(cells[hOfsted]));
+                    if (hAge    >= 0 && hAge    < cells.Count) school.AgeRange     = CellText(cells[hAge]);
+                    if (hDist   >= 0 && hDist   < cells.Count) school.Distance     = FormatDistance(CellText(cells[hDist]));
 
-                    // Content-scan remaining cells for any fields still missing
+                    // Content-scan remaining cells for any fields still missing.
+                    // Use raw InnerText (not CleanText) to avoid the Length>2 filter
+                    // that would strip short distance values like "1" or "2".
                     for (int c = 0; c < cells.Count; c++)
                     {
                         if (c == linkCellIdx) continue;
-                        var t = CleanText(cells[c].InnerText);
+                        var t = CellText(cells[c]);
                         if (string.IsNullOrEmpty(t)) continue;
 
-                        // Distance: a bare decimal like "0.39" or "0.39 miles"
-                        if (string.IsNullOrEmpty(school.Distance) &&
-                            Regex.IsMatch(t, @"^\d{1,2}(\.\d{1,2})?(\s*miles?)?$", RegexOptions.IgnoreCase))
+                        // Distance: use double.TryParse — handles "0.39", "2.5", "0.3875", "1 miles"
+                        if (string.IsNullOrEmpty(school.Distance))
                         {
-                            school.Distance = FormatDistance(t);
-                            continue;
+                            var raw = Regex.Replace(t, @"\s*miles?", "", RegexOptions.IgnoreCase).Trim();
+                            if (double.TryParse(raw, System.Globalization.NumberStyles.Float,
+                                                System.Globalization.CultureInfo.InvariantCulture,
+                                                out var distVal)
+                                && distVal >= 0 && distVal < 50)  // valid distance range
+                            {
+                                school.Distance = $"{distVal:F1} mi";
+                                continue;
+                            }
                         }
                         // Address: contains Bradford postcode
                         if (string.IsNullOrEmpty(school.Address) &&
@@ -529,6 +537,10 @@ public partial class CouncilToolService
             .OrderBy(s => ParseDistanceValue(s.Distance))
             .ToList();
     }
+
+    // Raw cell text without CleanText's Length>2 filter (needed for short values like "1", "2")
+    private static string CellText(HtmlNode cell) =>
+        Regex.Replace(cell.InnerText, @"\s+", " ").Replace(" ", " ").Trim();
 
     private static string FormatDistance(string raw)
     {

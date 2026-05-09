@@ -576,6 +576,73 @@ ul { list-style: none; }
 }
 .bin-link:hover { background: #e8f0fb; text-decoration: none; }
 
+/* ── School cards ───────────────────────────────────────────────────────── */
+.sch-list-card, .sch-card {
+  margin-top: 10px; border-radius: 14px; overflow: hidden;
+  border: 1.5px solid #c8daf0;
+  box-shadow: 0 2px 12px rgba(0,81,146,.1);
+}
+.sch-card-head {
+  background: linear-gradient(120deg, #1a5c2e, #2e7d47);
+  color: #fff; padding: 10px 16px; font-size: .82rem; font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+}
+.sch-card-head span { flex: 1; }
+.sch-list { background: #fff; padding: 4px 0; }
+.sch-btn {
+  width: 100%; display: flex; align-items: center; gap: 12px;
+  padding: 11px 16px; border: none; background: transparent; cursor: pointer;
+  border-bottom: 1px solid #eef3fb; text-align: left;
+  transition: background .12s;
+}
+.sch-btn:last-child { border-bottom: none; }
+.sch-btn:hover { background: #f4faf6; }
+.sch-num {
+  min-width: 22px; height: 22px; border-radius: 50%;
+  background: #e6f4ec; color: #1a5c2e;
+  font-size: .73rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.sch-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.sch-name { font-size: .88rem; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sch-meta { font-size: .74rem; color: #64748b; }
+.sch-dist { font-size: .72rem; color: #2e7d47; font-weight: 600; }
+.sch-arrow { color: #94a3b8; flex-shrink: 0; }
+
+/* Ofsted rating badges */
+.ofsted-badge {
+  font-size: .68rem; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+  white-space: nowrap; flex-shrink: 0;
+}
+.ofsted-outstanding { background: #d1fae5; color: #065f46; }
+.ofsted-good        { background: #dbeafe; color: #1e40af; }
+.ofsted-ri          { background: #fef3c7; color: #92400e; }
+.ofsted-inadequate  { background: #fee2e2; color: #991b1b; }
+.ofsted-unknown     { background: #f1f5f9; color: #64748b; }
+
+/* School detail card */
+.sch-details { background: #fff; padding: 4px 0; }
+.sch-detail-row {
+  display: flex; gap: 12px; padding: 9px 16px;
+  border-bottom: 1px solid #f1f5f9; font-size: .85rem;
+}
+.sch-detail-row:last-child { border-bottom: none; }
+.sch-dl { min-width: 72px; color: #64748b; font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .3px; padding-top: 1px; }
+.sch-dv { color: #1e293b; flex: 1; }
+.sch-dv a { color: #1a5c2e; text-decoration: underline; }
+.sch-card-actions {
+  display: flex; gap: 0; border-top: 1.5px solid #e2e8f0;
+}
+.sch-action-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 11px 10px; font-size: .78rem; font-weight: 700;
+  text-decoration: none; transition: background .13s;
+}
+.sch-btn-primary  { background: #1a5c2e; color: #fff; border-right: 1px solid #145226; }
+.sch-btn-primary:hover  { background: #145226; color: #fff; text-decoration: none; }
+.sch-btn-secondary { background: #f4faf6; color: #1a5c2e; }
+.sch-btn-secondary:hover { background: #e6f4ec; text-decoration: none; }
+
 /* ── Council tax card ── */
 .ct-card {
   margin-top: 10px; border-radius: 14px; overflow: hidden;

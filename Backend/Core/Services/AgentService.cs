@@ -35,8 +35,11 @@ public class AgentService : IAgentService
         - **get_council_tax_info** — council tax bands, rates, discounts, payments (general info)
         - **lookup_council_tax_band** — look up the actual band and amount for a specific postcode (use this when user asks "how much is my council tax" or "what band am I")
         - **check_planning_application** — planning portal search
-        - **find_local_services** — libraries with distance from postcode, parks, schools, leisure centres
+        - **find_local_services** — libraries with distance from postcode, parks, leisure centres
         - **get_library_details** — opening hours, facilities, address and how to join for a specific library (call this after user picks a library)
+        - **find_schools_near_postcode** — find schools near a Bradford postcode with Ofsted ratings and distance
+        - **get_school_details** — full info for a specific school: Ofsted, type, phase, age range, admissions link
+        - **get_education_info** — Bradford education policies: admissions, SEND, free school meals, term dates
 
         ## Library queries — strict flow
         0. If user directly names a specific library (e.g. "Idle Library", "Bradford Central", "Shipley library")
@@ -123,6 +126,37 @@ public class AgentService : IAgentService
         | ♻️ Green | Fortnightly (alternate weeks) | Paper, glass, plastic, tins |
         | 🌿 Brown | Weekly Apr–Nov · Fortnightly Dec–Mar | Garden waste (subscription) |
 
+        ## Schools — strict flow
+        TRIGGER: any message containing "school", "primary", "secondary", "academy", "education",
+                 "ofsted", "admissions", "nursery", "year 7", "year 6", "sixth form", "enrol",
+                 "enroll", "children's school", "kids school", or any Bradford postcode alongside school-related terms.
+
+        0. If user directly names a specific school (e.g. "Thornton Primary", "Belle Vue Girls' Academy")
+           → call **get_school_details(school_name="{name}")** immediately. Do NOT ask for a postcode.
+        1. If user asks about education policy, admissions process, SEND, free school meals, term dates
+           (no specific school or postcode mentioned) → call **get_education_info(topic="{topic}")**.
+        2. If user asks for schools near them or mentions a postcode → call **find_schools_near_postcode(postcode="{postcode}")**.
+           If no postcode → ask: "What's your Bradford postcode? I'll find the nearest schools."
+        3. Present the school list. End with: "Tell me a school name for full details, or ask 'which is best' for a comparison."
+        4. When user picks a school → call **get_school_details(school_name="{name}")** immediately.
+
+        ## CRITICAL — School card handling
+        When [[SCHOOL_LIST]] appears: the UI shows a school picker card automatically.
+        - Write ONE short sentence: "Here are the X schools nearest to {postcode}."
+        - Do NOT list school names yourself.
+
+        When [[SCHOOL_CARD]] appears: the UI shows a school details card automatically.
+        - Summarise in 2-3 sentences: Ofsted rating, phase/type, age range.
+        - Include admissions advice: "Apply through Bradford Council for community schools; contact the school directly for academies."
+        - Add comparison advice when asked: use Ofsted rating as the primary metric; Outstanding > Good > Requires Improvement.
+
+        ## School comparison ("which is best?")
+        When the user asks which school is best or to compare schools:
+        - Use Ofsted rating as the main criterion (Outstanding best, then Good)
+        - Mention phase fit (primary vs secondary), distance, and type (community vs academy)
+        - Recommend the closest Outstanding or Good school
+        - Always note: "The best school for your child depends on their needs — visit before deciding."
+
         ## How to write replies
         - Keep replies short — 2-3 sentences per section max
         - Separate each distinct topic with a blank line (so they split into separate bubbles)
@@ -175,7 +209,7 @@ public class AgentService : IAgentService
                 var reply = response.Content ?? string.Empty;
                 await _conversation.SaveTurnAsync(request.SessionId, "assistant", reply, ct);
 
-                var (addresses, binDates, libraries, councilTax, ctProperties) = ExtractStructuredData(history);
+                var (addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails) = ExtractStructuredData(history);
 
                 return new ChatResponse
                 {
@@ -187,7 +221,9 @@ public class AgentService : IAgentService
                     BinDates             = binDates,
                     Libraries            = libraries,
                     CouncilTaxInfo       = councilTax,
-                    CouncilTaxProperties = ctProperties
+                    CouncilTaxProperties = ctProperties,
+                    Schools              = schools,
+                    SchoolDetails        = schoolDetails
                 };
             }
 
@@ -250,14 +286,16 @@ public class AgentService : IAgentService
         await _conversation.SaveTurnAsync(request.SessionId, "assistant", sb.ToString(), ct);
 
         // Emit structured data as a final special event so the frontend can render cards
-        var (addresses, binDates, libraries, councilTax, ctProperties) = ExtractStructuredData(history);
+        var (addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails) = ExtractStructuredData(history);
         var structured = new ChatResponse
         {
             Addresses            = addresses,
             BinDates             = binDates,
             Libraries            = libraries,
             CouncilTaxInfo       = councilTax,
-            CouncilTaxProperties = ctProperties
+            CouncilTaxProperties = ctProperties,
+            Schools              = schools,
+            SchoolDetails        = schoolDetails
         };
         yield return "[STRUCTURED]" + System.Text.Json.JsonSerializer.Serialize(structured, _camelCase);
     }
@@ -299,7 +337,7 @@ public class AgentService : IAgentService
 
     // Extract structured data markers from tool results.
     // For addresses: keep the largest list (Bradford form > Overpass fallback).
-    internal static (List<AddressOption>? addresses, BinDateCard? binDates, List<LibraryOption>? libraries, CouncilTaxCard? councilTax, List<CouncilTaxPropertyOption>? ctProperties)
+    internal static (List<AddressOption>? addresses, BinDateCard? binDates, List<LibraryOption>? libraries, CouncilTaxCard? councilTax, List<CouncilTaxPropertyOption>? ctProperties, List<SchoolOption>? schools, SchoolCard? schoolDetails)
         ExtractStructuredData(List<LlmMessage> history)
     {
         List<AddressOption>?            addresses    = null;
@@ -307,6 +345,8 @@ public class AgentService : IAgentService
         List<LibraryOption>?            libraries    = null;
         CouncilTaxCard?                 councilTax   = null;
         List<CouncilTaxPropertyOption>? ctProperties = null;
+        List<SchoolOption>?             schools      = null;
+        SchoolCard?                     schoolDetails = null;
 
         foreach (var msg in history.OfType<ToolResultMessage>())
         {
@@ -358,9 +398,26 @@ public class AgentService : IAgentService
                 }
                 catch { }
             }
+
+            var schoolListJson = ExtractBetweenMarkers(content, "[[SCHOOL_LIST]]", "[[/SCHOOL_LIST]]");
+            if (schoolListJson != null)
+            {
+                try
+                {
+                    var parsed = System.Text.Json.JsonSerializer.Deserialize<List<SchoolOption>>(schoolListJson);
+                    if (parsed != null && parsed.Count > (schools?.Count ?? 0)) schools = parsed;
+                }
+                catch { }
+            }
+
+            var schoolCardJson = ExtractBetweenMarkers(content, "[[SCHOOL_CARD]]", "[[/SCHOOL_CARD]]");
+            if (schoolCardJson != null)
+            {
+                try { schoolDetails = System.Text.Json.JsonSerializer.Deserialize<SchoolCard>(schoolCardJson); } catch { }
+            }
         }
 
-        return (addresses, binDates, libraries, councilTax, ctProperties);
+        return (addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails);
     }
 
     private static string? ExtractBetweenMarkers(string text, string open, string close)
@@ -389,7 +446,10 @@ public class AgentService : IAgentService
         // Common tool trigger keywords
         var toolWords = new[] { "bin", "recycling", "collection", "library", "libraries",
                                 "council tax", "tax band", "band ", "planning", "blue badge",
-                                "postcode", "address", "i live at", "nearest" };
+                                "postcode", "address", "i live at", "nearest",
+                                "school", "primary", "secondary", "academy", "ofsted",
+                                "admissions", "nursery", "sixth form", "free school meal",
+                                "send ", "special education", "term date" };
         return toolWords.Any(w => m.Contains(w));
     }
 

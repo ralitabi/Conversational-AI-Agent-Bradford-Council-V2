@@ -21,6 +21,8 @@ public class ChatResponse
     public List<LibraryOption>?            Libraries          { get; set; }
     public CouncilTaxCard?                 CouncilTaxInfo     { get; set; }
     public List<CouncilTaxPropertyOption>? CouncilTaxProperties { get; set; }
+    public List<SchoolOption>?             Schools            { get; set; }
+    public SchoolCard?                     SchoolDetails      { get; set; }
 }
 
 public class CouncilTaxPropertyOption
@@ -86,4 +88,35 @@ public class CouncilTaxBandRate
     public string Band          { get; set; } = string.Empty;
     public string AnnualAmount  { get; set; } = string.Empty;
     public string MonthlyAmount { get; set; } = string.Empty;
+}
+
+public class SchoolOption
+{
+    public int    Number       { get; set; }
+    public string Name         { get; set; } = string.Empty;
+    public string Address      { get; set; } = string.Empty;
+    public string Phase        { get; set; } = string.Empty;
+    public string Type         { get; set; } = string.Empty;
+    public string OfstedRating { get; set; } = string.Empty;
+    public string Distance     { get; set; } = string.Empty;
+    public string Urn          { get; set; } = string.Empty;
+    public string Website      { get; set; } = string.Empty;
+    public string Phone        { get; set; } = string.Empty;
+}
+
+public class SchoolCard
+{
+    public string Name          { get; set; } = string.Empty;
+    public string Address       { get; set; } = string.Empty;
+    public string Phone         { get; set; } = string.Empty;
+    public string Website       { get; set; } = string.Empty;
+    public string Phase         { get; set; } = string.Empty;
+    public string Type          { get; set; } = string.Empty;
+    public string OfstedRating  { get; set; } = string.Empty;
+    public string OfstedDate    { get; set; } = string.Empty;
+    public string Pupils        { get; set; } = string.Empty;
+    public string AgeRange      { get; set; } = string.Empty;
+    public string Urn           { get; set; } = string.Empty;
+    public string AdmissionsUrl { get; set; } = "https://www.bradford.gov.uk/education-and-skills/schools/school-admissions/";
+    public string OfstedUrl     { get; set; } = "https://reports.ofsted.gov.uk/";
 }

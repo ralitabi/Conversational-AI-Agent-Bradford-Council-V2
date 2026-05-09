@@ -143,7 +143,8 @@ async function doSend(override, displayText) {
     finaliseStreamBubble(streamDiv, fullText,
       structured?.addresses, structured?.binDates,
       structured?.libraries, structured?.councilTaxInfo,
-      structured?.councilTaxProperties);
+      structured?.councilTaxProperties,
+      structured?.schools, structured?.schoolDetails);
 
   } catch (err) {
     hideDots();
@@ -186,7 +187,7 @@ function updateStreamBubble(div, text) {
   if (span) { span.innerHTML = renderMarkdown(text); scrollEnd(); }
 }
 
-function finaliseStreamBubble(div, text, addresses, binDates, libraries, councilTax, ctProperties) {
+function finaliseStreamBubble(div, text, addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails) {
   // Remove cursor, show time
   const cursor = div.querySelector('.stream-cursor');
   if (cursor) cursor.remove();
@@ -197,11 +198,13 @@ function finaliseStreamBubble(div, text, addresses, binDates, libraries, council
   // Add structured cards
   const wrapper = div.querySelector('.bubble.alex-bubble').parentElement;
   let extras = '';
-  if (addresses && addresses.length > 0)     extras += buildAddressCard(addresses);
-  if (binDates)                               extras += buildBinDateCard(binDates);
-  if (libraries && libraries.length > 0)     extras += buildLibraryCard(libraries);
+  if (addresses && addresses.length > 0)       extras += buildAddressCard(addresses);
+  if (binDates)                                 extras += buildBinDateCard(binDates);
+  if (libraries && libraries.length > 0)       extras += buildLibraryCard(libraries);
   if (ctProperties && ctProperties.length > 0) extras += buildCouncilTaxPropertyPicker(ctProperties);
-  else if (councilTax)                        extras += buildCouncilTaxCard(councilTax);
+  else if (councilTax)                          extras += buildCouncilTaxCard(councilTax);
+  if (schools && schools.length > 0)           extras += buildSchoolListCard(schools);
+  if (schoolDetails)                            extras += buildSchoolCard(schoolDetails);
   if (extras) wrapper.insertAdjacentHTML('beforeend', extras);
 
   // Run multi-bubble split on finalised text
@@ -217,8 +220,8 @@ function finaliseStreamBubble(div, text, addresses, binDates, libraries, council
         hideInterimDots();
         appendAlexBubble(parts[idx],
           [], isLast ? addresses : null, isLast ? binDates : null,
-          isLast ? libraries : null, isLast ? councilTax : null,
-          isLast ? ctProperties : null);
+          isLast ? libraries : null, isLast ? councilTax : null, isLast ? ctProperties : null,
+          isLast ? schools : null, isLast ? schoolDetails : null);
       }, delay);
       delay += Math.min(1600, parts[idx].length * 20 + 600);
     }
@@ -269,36 +272,42 @@ function showInterimDots() {
 function hideInterimDots() { interimDots?.remove(); interimDots = null; }
 
 /* Entry point — single or multi-bubble */
-function addAlexMsg(text, sources, addresses, binDates, libraries, councilTax, ctProperties) {
+function addAlexMsg(text, sources, addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails) {
   const parts = splitIntoMessages(text);
-  if (parts.length <= 1 || addresses || binDates || libraries || councilTax || ctProperties) {
-    appendAlexBubble(text, sources, addresses, binDates, libraries, councilTax, ctProperties);
+  const hasCards = addresses || binDates || libraries || councilTax || ctProperties || schools || schoolDetails;
+  if (parts.length <= 1 || hasCards) {
+    appendAlexBubble(text, sources, addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails);
     return;
   }
-  appendAlexBubble(parts[0], [], null, null, null, null, null);
+  appendAlexBubble(parts[0], [], null, null, null, null, null, null, null);
   let delay = Math.min(1600, parts[0].length * 20 + 600);
   for (let i = 1; i < parts.length; i++) {
     const idx = i, isLast = idx === parts.length - 1;
     setTimeout(showInterimDots, Math.max(0, delay - 650));
     setTimeout(() => {
       hideInterimDots();
-      appendAlexBubble(parts[idx], isLast ? sources : [], isLast ? addresses : null, isLast ? binDates : null, isLast ? libraries : null, isLast ? councilTax : null, isLast ? ctProperties : null);
+      appendAlexBubble(parts[idx],
+        isLast ? sources : [], isLast ? addresses : null, isLast ? binDates : null,
+        isLast ? libraries : null, isLast ? councilTax : null, isLast ? ctProperties : null,
+        isLast ? schools : null, isLast ? schoolDetails : null);
     }, delay);
     delay += Math.min(1600, parts[idx].length * 20 + 600);
   }
 }
 
 /* Render one Alex bubble — time inside bubble (matches React) */
-function appendAlexBubble(text, sources, addresses, binDates, libraries, councilTax, ctProperties) {
+function appendAlexBubble(text, sources, addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails) {
   const div = document.createElement('div');
   div.className = 'msg-row alex-row';
 
   let extras = '';
-  if (addresses && addresses.length > 0)   extras += buildAddressCard(addresses);
-  if (binDates)                             extras += buildBinDateCard(binDates);
-  if (libraries && libraries.length > 0)   extras += buildLibraryCard(libraries);
+  if (addresses && addresses.length > 0)       extras += buildAddressCard(addresses);
+  if (binDates)                                 extras += buildBinDateCard(binDates);
+  if (libraries && libraries.length > 0)       extras += buildLibraryCard(libraries);
   if (ctProperties && ctProperties.length > 0) extras += buildCouncilTaxPropertyPicker(ctProperties);
-  else if (councilTax)                     extras += buildCouncilTaxCard(councilTax);
+  else if (councilTax)                          extras += buildCouncilTaxCard(councilTax);
+  if (schools && schools.length > 0)           extras += buildSchoolListCard(schools);
+  if (schoolDetails)                            extras += buildSchoolCard(schoolDetails);
 
   div.innerHTML = `
     <div class="alex-ava">${ALEX_ICON}</div>
@@ -450,6 +459,96 @@ function buildBinDateCard(bin) {
 /* ── Library picker card — clickable bubble buttons ── */
 function selectLibrary(name) {
   doSend(`Tell me about ${name}`);
+}
+
+/* ── Ofsted badge colour ── */
+function ofstedClass(rating) {
+  if (!rating) return '';
+  const r = rating.toLowerCase();
+  if (r.includes('outstanding'))         return 'ofsted-outstanding';
+  if (r.includes('good'))                return 'ofsted-good';
+  if (r.includes('requires'))            return 'ofsted-ri';
+  if (r.includes('inadequate'))          return 'ofsted-inadequate';
+  return 'ofsted-unknown';
+}
+
+/* ── School picker list ── */
+function buildSchoolListCard(schools) {
+  if (!schools || schools.length === 0) return '';
+
+  const rows = schools.map(s => {
+    const badge = s.ofstedRating
+      ? `<span class="ofsted-badge ${ofstedClass(s.ofstedRating)}">${esc(s.ofstedRating)}</span>`
+      : '';
+    const dist = s.distance ? `<span class="sch-dist">${esc(s.distance)}</span>` : '';
+    return `
+      <button class="sch-btn" onclick="selectSchool('${esc2(s.name)}')">
+        <span class="sch-num">${s.number}</span>
+        <span class="sch-info">
+          <span class="sch-name">${esc(s.name)}</span>
+          <span class="sch-meta">${esc(s.phase||'')}${s.type?' · '+esc(s.type):''} &nbsp;${dist}</span>
+        </span>
+        ${badge}
+        <svg class="sch-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>`;
+  }).join('');
+
+  return `
+    <div class="sch-list-card">
+      <div class="sch-card-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+        Nearby Schools — tap one for full details
+      </div>
+      <div class="sch-list">${rows}</div>
+    </div>`;
+}
+
+function selectSchool(name) {
+  doSend(`Tell me about ${name}`);
+}
+
+/* ── School detail card ── */
+function buildSchoolCard(s) {
+  if (!s) return '';
+  const badge = s.ofstedRating
+    ? `<span class="ofsted-badge ${ofstedClass(s.ofstedRating)}">${esc(s.ofstedRating)}</span>`
+    : '';
+  const ofstedDateStr = s.ofstedDate ? ` (${esc(s.ofstedDate)})` : '';
+  const phoneRow = s.phone
+    ? `<div class="sch-detail-row"><span class="sch-dl">Phone</span><span class="sch-dv"><a href="tel:${esc(s.phone)}">${esc(s.phone)}</a></span></div>`
+    : '';
+  const siteRow = s.website
+    ? `<div class="sch-detail-row"><span class="sch-dl">Website</span><span class="sch-dv"><a href="${esc(s.website)}" target="_blank" rel="noopener">Visit school website ↗</a></span></div>`
+    : '';
+
+  return `
+    <div class="sch-card">
+      <div class="sch-card-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+        <span>${esc(s.name)}</span>
+        ${badge}
+      </div>
+      <div class="sch-details">
+        ${s.address  ? `<div class="sch-detail-row"><span class="sch-dl">Address</span><span class="sch-dv">${esc(s.address)}</span></div>` : ''}
+        ${s.phase    ? `<div class="sch-detail-row"><span class="sch-dl">Phase</span><span class="sch-dv">${esc(s.phase)}</span></div>` : ''}
+        ${s.type     ? `<div class="sch-detail-row"><span class="sch-dl">Type</span><span class="sch-dv">${esc(s.type)}</span></div>` : ''}
+        ${s.ageRange ? `<div class="sch-detail-row"><span class="sch-dl">Ages</span><span class="sch-dv">${esc(s.ageRange)}</span></div>` : ''}
+        ${s.pupils   ? `<div class="sch-detail-row"><span class="sch-dl">Pupils</span><span class="sch-dv">${esc(s.pupils)}</span></div>` : ''}
+        <div class="sch-detail-row"><span class="sch-dl">Ofsted</span><span class="sch-dv">${esc(s.ofstedRating||'Not yet inspected')}${ofstedDateStr}</span></div>
+        ${phoneRow}
+        ${siteRow}
+      </div>
+      <div class="sch-card-actions">
+        <a href="${esc(s.admissionsUrl||'https://www.bradford.gov.uk/education-and-skills/schools/school-admissions/')}" target="_blank" class="sch-action-btn sch-btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Apply for a school place
+        </a>
+        <a href="${esc(s.ofstedUrl||'https://reports.ofsted.gov.uk/')}" target="_blank" class="sch-action-btn sch-btn-secondary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Ofsted report
+        </a>
+      </div>
+    </div>`;
 }
 
 function buildLibraryCard(libraries) {

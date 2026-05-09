@@ -173,6 +173,58 @@ public partial class CouncilToolService : IToolService
                     required   = new[] { "postcode" }
                 }
             }
+        },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "find_schools_near_postcode",
+                Description = "Find schools near a Bradford postcode. Returns a list of nearby schools with Ofsted rating, phase (primary/secondary), type, and distance. Call this whenever the user asks about schools near them, school finder, or which schools are in their area.",
+                Parameters  = new
+                {
+                    type       = "object",
+                    properties = new
+                    {
+                        postcode = new { type = "string", description = "Bradford postcode e.g. BD7 3AB" },
+                        phase    = new { type = "string", description = "Optional filter: Primary, Secondary, Nursery, All-through, Sixth Form" }
+                    },
+                    required = new[] { "postcode" }
+                }
+            }
+        },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "get_school_details",
+                Description = "Get full details for a specific Bradford school including Ofsted rating, type, age range, number of pupils, contact info, admissions link, and Ofsted report link. Call this when the user selects or asks about a specific school.",
+                Parameters  = new
+                {
+                    type       = "object",
+                    properties = new
+                    {
+                        school_name = new { type = "string", description = "Name of the school e.g. 'Thornton Primary School', 'Belle Vue Girls' Academy'" }
+                    },
+                    required = new[] { "school_name" }
+                }
+            }
+        },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "get_education_info",
+                Description = "Fetch Bradford Council education policies, school admissions, SEND support, free school meals, term dates, and general education guidance from bradford.gov.uk.",
+                Parameters  = new
+                {
+                    type       = "object",
+                    properties = new
+                    {
+                        topic = new { type = "string", description = "Education topic e.g. 'school admissions', 'SEND', 'free school meals', 'term dates', 'starting school'" }
+                    },
+                    required = new[] { "topic" }
+                }
+            }
         }
     };
 
@@ -199,6 +251,9 @@ public partial class CouncilToolService : IToolService
                 "find_local_services"           => await FindLocalServicesAsync(args.GetValueOrDefault("service", ""), args.GetValueOrDefault("location", ""), ct),
                 "get_library_details"           => await GetLibraryDetailsAsync(args.GetValueOrDefault("library_name", ""), ct),
                 "lookup_council_tax_band"       => await LookupCouncilTaxBandAsync(args.GetValueOrDefault("postcode", ""), args.GetValueOrDefault("address", ""), ct),
+                "find_schools_near_postcode"    => await FindSchoolsNearPostcodeAsync(args.GetValueOrDefault("postcode", ""), args.GetValueOrDefault("phase", ""), ct),
+                "get_school_details"            => await GetSchoolDetailsAsync(args.GetValueOrDefault("school_name", ""), ct),
+                "get_education_info"            => await GetEducationInfoAsync(args.GetValueOrDefault("topic", "schools"), ct),
                 _                               => $"Unknown tool: {toolName}"
             };
         }

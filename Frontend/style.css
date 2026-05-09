@@ -588,7 +588,7 @@ ul { list-style: none; }
   display: flex; align-items: center; gap: 8px;
 }
 .sch-card-head span { flex: 1; }
-.sch-list { background: #fff; padding: 4px 0; }
+.sch-list { background: #fff; padding: 4px 0; max-height: 420px; overflow-y: auto; }
 .sch-btn {
   width: 100%; display: flex; align-items: center; gap: 12px;
   padding: 11px 16px; border: none; background: transparent; cursor: pointer;
@@ -607,6 +607,12 @@ ul { list-style: none; }
 .sch-name { font-size: .88rem; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sch-meta { font-size: .74rem; color: #64748b; }
 .sch-dist { font-size: .72rem; color: #2e7d47; font-weight: 600; }
+.sch-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.sch-dist-pill {
+  font-size: .71rem; font-weight: 700; color: #1a5c2e;
+  background: #e6f4ec; border-radius: 10px; padding: 2px 7px;
+  white-space: nowrap;
+}
 .sch-arrow { color: #94a3b8; flex-shrink: 0; }
 
 /* Ofsted rating badges */

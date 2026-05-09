@@ -480,15 +480,16 @@ function buildSchoolListCard(schools) {
     const badge = s.ofstedRating
       ? `<span class="ofsted-badge ${ofstedClass(s.ofstedRating)}">${esc(s.ofstedRating)}</span>`
       : '';
-    const dist = s.distance ? `<span class="sch-dist">${esc(s.distance)}</span>` : '';
+    const dist = s.distance ? `<span class="sch-dist-pill">${esc(s.distance)}</span>` : '';
+    const meta = [s.phase, s.type].filter(Boolean).map(esc).join(' · ');
     return `
       <button class="sch-btn" onclick="selectSchool('${esc2(s.name)}')">
         <span class="sch-num">${s.number}</span>
         <span class="sch-info">
           <span class="sch-name">${esc(s.name)}</span>
-          <span class="sch-meta">${esc(s.phase||'')}${s.type?' · '+esc(s.type):''} &nbsp;${dist}</span>
+          <span class="sch-meta">${meta}${s.address ? ' · ' + esc(s.address) : ''}</span>
         </span>
-        ${badge}
+        <span class="sch-right">${badge}${dist}</span>
         <svg class="sch-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg>
       </button>`;
   }).join('');

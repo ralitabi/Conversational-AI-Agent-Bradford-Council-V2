@@ -78,6 +78,13 @@ public partial class CouncilToolService
         }
 
         // 3. Sort by distance and apply phase filter
+        var withCalcDist = schools.Count(s => !string.IsNullOrEmpty(s.Distance));
+        _logger.LogInformation("SchoolDist: {D}/{N} schools have distance after enrichment. Top 3: [{T}]",
+            withCalcDist, schools.Count,
+            string.Join("; ", schools.Where(s => !string.IsNullOrEmpty(s.Distance))
+                                     .OrderBy(s => ParseDistanceValue(s.Distance))
+                                     .Take(3).Select(s => $"{s.Name}={s.Distance}")));
+
         var sorted = schools
             .Where(s => !string.IsNullOrWhiteSpace(s.Name))
             .OrderBy(s => ParseDistanceValue(s.Distance))
@@ -129,14 +136,22 @@ public partial class CouncilToolService
         var result = new Dictionary<string, (double, double)>(StringComparer.OrdinalIgnoreCase);
         if (postcodes.Count == 0) return result;
 
+        _logger.LogInformation("SchoolDist: bulk lookup {N} postcodes: {P}",
+            postcodes.Count, string.Join(", ", postcodes.Take(5)));
+
         try
         {
-            // postcodes.io bulk accepts up to 100 postcodes per request
+            // Use a fresh HttpClient — the Crawler client has HTML-specific headers
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            client.DefaultRequestHeaders.Add("Accept", "application/json");
+
             foreach (var batch in postcodes.Chunk(100))
             {
                 var body    = JsonSerializer.Serialize(new { postcodes = batch });
                 var content = new StringContent(body, Encoding.UTF8, "application/json");
-                var resp    = await _http.PostAsync("https://api.postcodes.io/postcodes", content, ct);
+                var resp    = await client.PostAsync("https://api.postcodes.io/postcodes", content, ct);
+
+                _logger.LogInformation("SchoolDist: postcodes.io status={S}", resp.StatusCode);
                 if (!resp.IsSuccessStatusCode) continue;
 
                 var json = await resp.Content.ReadAsStringAsync(ct);
@@ -154,6 +169,9 @@ public partial class CouncilToolService
                         result[query] = (lat.GetDouble(), lon.GetDouble());
                 }
             }
+
+            _logger.LogInformation("SchoolDist: resolved {N}/{T} postcodes",
+                result.Count, postcodes.Count);
         }
         catch (Exception ex)
         {
@@ -287,7 +305,10 @@ public partial class CouncilToolService
                                 phase.Contains(s.Phase, StringComparison.OrdinalIgnoreCase))
                     .ToList();
 
-            _logger.LogInformation("SchoolFinder: found {N} schools", results.Count);
+            var withDist = results.Count(s => !string.IsNullOrEmpty(s.Distance));
+            _logger.LogInformation("SchoolFinder: {N} schools, {D} with BSO distance. Sample: [{A}]",
+                results.Count, withDist,
+                string.Join("; ", results.Take(3).Select(s => $"{s.Name}|addr={s.Address}|dist={s.Distance}")));
             return results;
         }
         catch (Exception ex)
@@ -316,7 +337,7 @@ public partial class CouncilToolService
     // ── Parse Bradford BSO school finder results HTML ────────────────────────
     // The BSO site is ASP.NET GridView — school name is ALWAYS the linked cell.
     // Column order varies, so we detect by content not position.
-    private static List<SchoolData> ParseSchoolResults(string html, string? postcode)
+    private List<SchoolData> ParseSchoolResults(string html, string? postcode)
     {
         var doc = new HtmlDocument();
         doc.LoadHtml(html);
@@ -337,6 +358,9 @@ public partial class CouncilToolService
                 if (headerCells == null) continue;
                 var headers = headerCells.Select(h => CleanText(h.InnerText).ToLower()).ToList();
 
+                // Log headers so we can see what BSO returns
+                _logger.LogInformation("BSO table headers: [{H}]", string.Join(" | ", headers));
+
                 // Must look like a school table
                 if (!headers.Any(h => h.Contains("school") || h.Contains("name") ||
                                       h.Contains("estab") || h.Contains("distance")))
@@ -355,6 +379,11 @@ public partial class CouncilToolService
                 {
                     var cells = rows[r].SelectNodes(".//td");
                     if (cells == null || cells.Count < 2) continue;
+
+                    // Log first data row so we can see actual cell values
+                    if (r == 1)
+                        _logger.LogInformation("BSO row1 cells: [{C}]",
+                            string.Join(" | ", cells.Select(c => CleanText(c.InnerText)).Take(8)));
 
                     var school = new SchoolData();
 

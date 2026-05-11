@@ -1,72 +1,43 @@
 # Bradford Council AI Assistant
 
-A conversational AI assistant for Bradford Council residents.
+A conversational AI assistant for Bradford Council residents — bin dates, council tax, schools, libraries and more from a single chat window.
 
-**Live Demo:** https://bradford-council-ai.vercel.app  
-**API Health:** https://bradford-council-api-production.up.railway.app/health  
-**License:** MIT | **Framework:** .NET 8 | **Model:** GPT-4o-mini
+**Live Demo:** https://bradford-council-ai.vercel.app &nbsp;|&nbsp; **API:** https://bradford-council-api-production.up.railway.app/health
 
 ---
 
-## Summary
+## Features
 
-Ask about bin collection dates, council tax bands, nearby schools, libraries, planning applications and more — all from a single chat window, powered by GPT-4o-mini.
-
----
-
-## What It Does
-
-Bradford Council AI gives Bradford residents instant, accurate answers about council services — no more navigating confusing council websites.
-
-| Feature | Description |
+| Service | Description |
 |---|---|
-| **Bin Dates** | Exact upcoming grey, green and brown bin collection dates for any Bradford address |
-| **Council Tax** | Band (A–H) and annual / monthly charge for any Bradford postcode |
-| **School Finder** | Nearby schools sorted by walking distance with Ofsted ratings and admissions links |
-| **Library Finder** | All Bradford libraries sorted by distance with opening hours and facilities |
-| **Education Info** | Admissions process, SEND support, free school meals, term dates, uniforms |
-| **Planning** | Search Bradford's planning portal by application reference or address |
-| **Live Scraping** | Searches and reads bradford.gov.uk in real-time for any other council query |
+| Bin Collection | Exact grey, green and brown bin dates for any Bradford address |
+| Council Tax | Band A–H and annual / monthly charge for any Bradford postcode |
+| School Finder | Nearby schools sorted by distance with Ofsted ratings |
+| Library Finder | Libraries sorted by distance with opening hours |
+| Education Info | Admissions, SEND support, free meals, term dates |
+| Planning | Search the Bradford planning portal by reference or address |
+| General Queries | Live scraping of bradford.gov.uk for any council question |
 
 ---
 
 ## Architecture
 
 ```
-+------------------------------------------------------------------+
-|                        USER BROWSER                              |
-|                                                                  |
-|   index.html  --  chat.js  --  config.js  --  style.css         |
-|         |                                                        |
-|         |  SSE stream / REST POST                                |
-+---------+--------------------------------------------------------+
-          |
-          v
-+------------------------------------------------------------------+
-|                   RAILWAY  (ASP.NET Core 8)                      |
-|                                                                  |
-|   ChatController                                                 |
-|        |                                                         |
-|        v                                                         |
-|   AgentService  (agentic loop, up to 3 tool rounds)             |
-|        |                                                         |
-|        |-- LlmService (OpenAI GPT-4o-mini)                      |
-|        |                                                         |
-|        +-- CouncilToolService                                    |
-|               |-- Bin dates  (Bradford eForms scraper)           |
-|               |-- Council tax (GOV.UK VOA data)                  |
-|               |-- Schools    (Bradford BSO form)                 |
-|               |-- Libraries  (bradford.gov.uk)                   |
-|               |-- Planning   (Bradford portal)                   |
-|               +-- Web scraper (bradford.gov.uk)                  |
-|                                                                  |
-|   ConversationService (SQLite)                                   |
-|   RagService (Qdrant, optional)                                  |
-+------------------------------------------------------------------+
-          |                    |                    |
-          v                    v                    v
-    postcodes.io         bradford.gov.uk      bso.bradford.gov.uk
-    (free API)           (scraped live)       (school/bin eForms)
+User Browser (Vercel)
+    index.html / chat.js / config.js / style.css
+         |
+         |  HTTP POST  /  SSE Stream
+         v
+Railway — ASP.NET Core 8
+    ChatController
+        └── AgentService  (agentic loop, up to 3 rounds)
+                ├── LlmService          → OpenAI GPT-4o-mini
+                ├── CouncilToolService  → Bin / Tax / Schools / Libraries / Web
+                ├── ConversationService → SQLite
+                └── RagService          → Qdrant (optional)
+         |
+         v
+    postcodes.io  |  bradford.gov.uk  |  bso.bradford.gov.uk
 ```
 
 ---
@@ -75,69 +46,16 @@ Bradford Council AI gives Bradford residents instant, accurate answers about cou
 
 ```
 Bradford Council Project/
-|
-+-- Frontend/                        Static site deployed to Vercel
-|   +-- index.html                   Main chat UI
-|   +-- login.html                   Optional authentication page
-|   +-- chat.js                      UI logic, card rendering, SSE streaming
-|   +-- config.js                    Auto-detects local vs production API URL
-|   +-- style.css                    Complete stylesheet
-|
-+-- Backend/                         ASP.NET Core API deployed to Railway
-|   |
-|   +-- Api/
-|   |   +-- Controllers/
-|   |   |   +-- ChatController.cs    POST /api/chat  +  GET /api/chat/stream
-|   |   |   +-- IngestionController.cs
-|   |   +-- Program.cs               DI, CORS, rate limiting, middleware
-|   |   +-- Dockerfile               Multi-stage Docker build
-|   |   +-- appsettings.json         Config skeleton (keys via env vars)
-|   |
-|   +-- Core/
-|   |   +-- Models/                  ChatRequest, ChatResponse, BinDateCard,
-|   |   |                            SchoolCard, CouncilTaxCard, LibraryOption
-|   |   +-- Interfaces/              Service contracts
-|   |   +-- Services/
-|   |       +-- AgentService.cs      Agentic loop, tool orchestration, system prompt
-|   |       +-- LlmService.cs        OpenAI client, streaming, tool call parsing
-|   |       +-- ConversationService.cs
-|   |       +-- RagService.cs        RAG retrieval from Qdrant
-|   |
-|   +-- Infrastructure/
-|   |   +-- Tools/
-|   |   |   +-- CouncilToolService.cs
-|   |   |   +-- CouncilToolService.Address.cs
-|   |   |   +-- CouncilToolService.BinDates.cs
-|   |   |   +-- CouncilToolService.CouncilTax.cs
-|   |   |   +-- CouncilToolService.Libraries.cs
-|   |   |   +-- CouncilToolService.Schools.cs
-|   |   |   +-- CouncilToolService.Web.cs
-|   |   +-- Data/
-|   |   |   +-- AgentDbContext.cs    EF Core + SQLite
-|   |   +-- Crawlers/
-|   |   |   +-- CouncilWebCrawler.cs Bradford.gov.uk crawler for RAG
-|   |   +-- VectorStore/
-|   |       +-- QdrantVectorStore.cs Qdrant client wrapper
-|   |
-|   +-- Tests/
-|       +-- AgentServiceTests.cs
-|
-+-- scripts/                         Local development scripts
-|   +-- start-all.bat                Double-click to start full stack
-|   +-- start-all.ps1
-|   +-- start-api.bat
-|   +-- start-api.ps1
-|   +-- start-qdrant.bat
-|   +-- start-qdrant.ps1
-|   +-- start-website.bat
-|   +-- start-website.ps1
-|
-+-- deploy.ps1                       Deploy frontend + backend
-+-- deploy.bat                       Double-click launcher for deploy.ps1
-+-- docker-compose.yml               Local Qdrant + API stack
-+-- railway.toml                     Railway build and health check config
-+-- README.md
-+-- LICENSE
+├── Frontend/               index.html, chat.js, config.js, style.css
+├── Backend/
+│   ├── Api/                ChatController, Program.cs, Dockerfile
+│   ├── Core/               Models, Interfaces, AgentService, LlmService
+│   ├── Infrastructure/     CouncilToolService, SQLite, Qdrant, Crawler
+│   └── Tests/
+├── scripts/                start-all / start-api / start-qdrant (.bat + .ps1)
+├── deploy.bat / deploy.ps1
+├── docker-compose.yml
+└── railway.toml
 ```
 
 ---
@@ -145,195 +63,92 @@ Bradford Council Project/
 ## Getting Started
 
 ### Prerequisites
+- .NET 8 SDK
+- Node.js 18+
+- Docker Desktop *(optional — for Qdrant RAG)*
+- OpenAI API key
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download)
-- [Node.js 18+](https://nodejs.org)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) *(optional, for Qdrant)*
-- An OpenAI API key
-
-### Step 1 — Clone the repo
+### Run locally
 
 ```bash
+# 1. Clone
 git clone https://github.com/ralitabi/Conversational-AI-Agent-Bradford-Council-V2.git
 cd Conversational-AI-Agent-Bradford-Council-V2
+
+# 2. Add API key — create Backend/Api/appsettings.Local.json
+{ "OpenAI": { "ApiKey": "sk-proj-..." } }
+
+# 3. Start API
+cd Backend && dotnet run --project Api
+
+# 4. Open Frontend/index.html in your browser
 ```
 
-### Step 2 — Add your OpenAI key
-
-Create `Backend/Api/appsettings.Local.json` (gitignored):
-
-```json
-{
-  "OpenAI": {
-    "ApiKey": "sk-proj-..."
-  }
-}
-```
-
-### Step 3 — Run the backend
-
-```bash
-cd Backend
-dotnet run --project Api
-```
-
-API starts on `http://localhost:5000`.
-
-### Step 4 — Open the frontend
-
-Open `Frontend/index.html` in your browser — `config.js` auto-detects `file://` and routes to `localhost:5000`.
-
-### Step 5 — Optional: Start Qdrant for RAG
-
-```bash
-docker-compose up qdrant
-```
-
-Or double-click `scripts/start-qdrant.bat`.
-
-### One-click local start
-
-Double-click `scripts/start-all.bat` to launch Qdrant, the API, and open the browser in one step.
+Or double-click **`scripts/start-all.bat`** to launch everything in one step.
 
 ---
 
 ## Deployment
 
 ### Backend — Railway
-
-Set these environment variables in the Railway dashboard:
-
-| Variable | Value |
-|---|---|
-| `OpenAI__ApiKey` | Your OpenAI secret key |
-| `OpenAI__ChatModel` | `gpt-4o-mini` |
-| `ConnectionStrings__Default` | `Data Source=/data/agent.db` |
-| `GetAddress__ApiKey` | optional getAddress.io key |
-
-Mount a Railway Volume at `/data` to persist the SQLite database.
-
-### Frontend — Vercel
-
+Set environment variables in the Railway dashboard, then:
 ```bash
-cd Frontend
-vercel --prod
+.\deploy.ps1 -Backend
 ```
 
-### One-command deploy
-
+### Frontend — Vercel
 ```bash
-# Deploy everything
-.\deploy.bat
-
-# Frontend only
 .\deploy.ps1 -Frontend
+```
 
-# Backend only
-.\deploy.ps1 -Backend
+### Deploy everything
+```bash
+.\deploy.bat
 ```
 
 ---
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `OpenAI__ApiKey` | Yes | — | OpenAI secret key |
-| `OpenAI__ChatModel` | | `gpt-4o-mini` | Chat model |
-| `OpenAI__EmbeddingModel` | | `text-embedding-3-small` | Embedding model for RAG |
-| `ConnectionStrings__Default` | | `Data Source=/data/agent.db` | SQLite path |
-| `GetAddress__ApiKey` | | — | getAddress.io for fuller address lookup |
-| `Qdrant__Host` | | `localhost` | Qdrant hostname |
-| `Qdrant__ApiKey` | | — | Qdrant Cloud API key |
-| `AdminKey` | | — | Protects `/api/ingest` endpoint |
+| Variable | Required | Description |
+|---|---|---|
+| `OpenAI__ApiKey` | Yes | OpenAI secret key |
+| `OpenAI__ChatModel` | | Default: `gpt-4o-mini` |
+| `ConnectionStrings__Default` | | Default: `Data Source=/data/agent.db` |
+| `Qdrant__Host` | | Default: `localhost` |
+| `Qdrant__ApiKey` | | Qdrant Cloud key |
+| `GetAddress__ApiKey` | | Optional address lookup |
+| `AdminKey` | | Protects `/api/ingest` |
 
 ---
 
 ## API Reference
 
-### POST /api/chat
-
-```json
-{
-  "sessionId": "abc-123",
-  "message": "When is my bin collected? BD5 8LT",
-  "streamResponse": false
-}
-```
-
-### GET /api/chat/stream
-
-```
-?sessionId=abc-123&message=find+schools+near+BD7+3AB
-```
-
-Streams SSE tokens, ends with a `[STRUCTURED]` event containing card data, then `[DONE]`.
-
-### GET /health
-
-```json
-{ "status": "healthy", "timestamp": "2026-05-11T10:00:00Z" }
-```
-
-### POST /api/ingest
-
-Requires `Authorization: Bearer {AdminKey}` header.
-
-```json
-{ "urls": ["https://www.bradford.gov.uk/bins"] }
-```
-
----
-
-## Agent Tools
-
-| Tool | Triggered when |
+| Endpoint | Description |
 |---|---|
-| `lookup_addresses_for_postcode` | User provides a postcode for bin collection |
-| `get_bin_dates_for_address` | User confirms their address |
-| `lookup_council_tax_band` | User asks about council tax band or amount |
-| `find_schools_near_postcode` | User asks for schools near a location |
-| `get_school_details` | User picks a specific school |
-| `get_education_info` | User asks about admissions, SEND, free meals, term dates |
-| `find_local_services` | User asks for libraries, parks or leisure centres |
-| `get_library_details` | User picks a specific library |
-| `search_bradford_council` | Any general council service question |
-| `fetch_council_page` | Agent needs to read a specific bradford.gov.uk page |
-| `get_council_tax_info` | Discounts, exemptions, how to pay |
-| `check_planning_application` | Planning portal search |
+| `POST /api/chat` | Full response as JSON |
+| `GET /api/chat/stream` | SSE token stream + `[STRUCTURED]` card event |
+| `GET /health` | Health check |
+| `POST /api/ingest` | Index URLs into Qdrant (requires `AdminKey`) |
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology | Purpose |
-|---|---|---|
-| Frontend | HTML / CSS / Vanilla JS | No framework, no build step |
-| Frontend hosting | Vercel | Global CDN |
-| Backend | ASP.NET Core 8 | Web API with SSE streaming |
-| Backend hosting | Railway | Docker container, auto-deploy |
-| LLM | OpenAI GPT-4o-mini | Tool-calling chat completions |
-| Database | SQLite + EF Core 8 | Conversation history per session |
-| Vector store | Qdrant | Optional RAG for indexed knowledge |
-| HTML parsing | HtmlAgilityPack | Scraping bradford.gov.uk |
-| Postcode data | postcodes.io | Free postcode to lat/lon, bulk lookup |
+| Layer | Technology |
+|---|---|
+| Frontend | HTML / CSS / Vanilla JS — Vercel |
+| Backend | ASP.NET Core 8 — Railway |
+| AI | OpenAI GPT-4o-mini (tool calling, SSE streaming) |
+| Database | SQLite + EF Core 8 |
+| Vector store | Qdrant (optional RAG) |
+| HTML parsing | HtmlAgilityPack |
+| Postcode data | postcodes.io |
 
 ---
 
 ## License
 
-This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE).
 
----
-
-## Acknowledgements
-
-- Bradford Metropolitan District Council — public service data
-- [postcodes.io](https://postcodes.io) — free open UK postcode API
-- [OpenAI](https://openai.com) — GPT-4o-mini language model
-- [Ofsted](https://ofsted.gov.uk) — school inspection data
-- [HtmlAgilityPack](https://html-agility-pack.net) — .NET HTML parsing
-
----
-
-*Made for Bradford residents.*
+*Made for Bradford residents by Raja Ali Tabish.*

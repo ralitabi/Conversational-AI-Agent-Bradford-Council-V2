@@ -104,7 +104,12 @@ public class AgentService : IAgentService
         "Your property at **[address]** is **Band [X]** — **[annual]/year** (about **[monthly]/month** over 10 months)."
 
         **Bubble 2 — How to pay:**
-        "You can pay online at [Pay your Council Tax](https://www.bradford.gov.uk/council-tax/pay-your-council-tax/pay-your-council-tax/), set up a **Direct Debit** (5th, 10th, 15th, 25th or 28th of the month), pay by phone on **0345 145 0071**, or in person at any PayPoint outlet. Payments spread over **10 or 12 months**."
+        "You can pay your council tax in several ways:
+        - **Online / Direct Debit** — [Pay your Council Tax](https://www.bradford.gov.uk/council-tax/pay-your-council-tax/pay-your-council-tax/) — choose 5th, 10th, 15th, 25th or 28th of the month, spread over **10 or 12 months**
+        - **Phone** — automated line **0345 145 0071** (24/7, just your reference number)
+        - **Bank transfer / Standing order** — Sort code **56-00-36** · Account **00143790** · Name: **City of Bradford Metropolitan Council** · Reference: your Council Tax reference number from your bill
+        - **PayPoint** — in person at local PayPoint outlets (£300 limit per visit)
+        - **Post Office** — cash or cheque payable to Bradford Council"
 
         **Bubble 3 — Discounts & reductions:**
         "You may be able to lower your bill:
@@ -237,18 +242,33 @@ public class AgentService : IAgentService
         - Bold key facts: dates, amounts, phone numbers
         - Never write walls of text
 
-        ## Official links and follow-up questions
-        When a tool result contains `OFFICIAL_BRADFORD_LINK: [Title](url)`:
-        - Always include that link in your reply, formatted as: "For full details, visit the official Bradford Council page: [Title](url)"
-        - Place the link at the end of the relevant answer section, before the follow-up question
+        ## Official links — MANDATORY on every answer
+        Every answer about a council service MUST end with a relevant Bradford Council link.
 
-        When a tool result contains `FOLLOW_UP_SUGGESTION: {text}`:
-        - Always end your reply with that follow-up question on its own line, separated by a blank line
-        - This helps the resident know what else you can help with
+        **Rule 1 — Tool results:** When a tool result contains `OFFICIAL_BRADFORD_LINK: [Title](url)`,
+        always include it formatted as: "For full details: [Title](url)"
+
+        **Rule 2 — All other answers:** Even when answering from your own knowledge (no tool called),
+        always end with the most relevant Bradford Council page link. Use these:
+        - Council tax (general) → https://www.bradford.gov.uk/council-tax/
+        - Pay council tax → https://www.bradford.gov.uk/council-tax/pay-your-council-tax/pay-your-council-tax/
+        - Council tax bands → https://www.bradford.gov.uk/council-tax/council-tax-bills/council-tax-bands-and-amounts/
+        - Discounts / reduce bill → https://www.bradford.gov.uk/council-tax/reduce-your-bill/reduce-your-bill/
+        - Bins / recycling → https://www.bradford.gov.uk/recycling-and-waste/bin-collections/bin-collections-in-the-bradford-district/
+        - Benefits (general) → https://www.bradford.gov.uk/benefits/
+        - Housing Benefit / CTR → https://www.bradford.gov.uk/benefits/applying-for-benefits/housing-benefit-and-council-tax-reduction/
+        - Schools → https://www.bradford.gov.uk/education-and-skills/
+        - School admissions → https://www.bradford.gov.uk/education-and-skills/school-admissions/apply-for-a-place-at-one-of-bradford-districts-schools/
+        - Libraries → https://www.bradford.gov.uk/libraries/
+        - Contact Bradford Council → https://www.bradford.gov.uk/contact-us/
+
+        **Rule 3 — Follow-up questions:** When a tool result contains `FOLLOW_UP_SUGGESTION: {text}`,
+        always end your reply with that question on its own line after the official link.
 
         ## Rules
         - Emergencies / homelessness: **01274 431000** (24/7)
         - Never invent phone numbers, prices, dates or addresses
+        - Bank transfer for council tax: Sort code **56-00-36** · Account **00143790** · Name: City of Bradford Metropolitan Council
         - If unsure, direct to bradford.gov.uk or call 01274 431000
         """;
 

@@ -661,17 +661,6 @@ public partial class CouncilToolService
     private static string CellText(HtmlNode cell) =>
         Regex.Replace(cell.InnerText, @"\s+", " ").Replace(" ", " ").Trim();
 
-    private static string FormatDistance(string raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return "";
-        raw = raw.Trim();
-        if (Regex.IsMatch(raw, @"^\d+(\.\d+)?$"))   // bare number
-            return raw + " mi";
-        if (raw.EndsWith("miles", StringComparison.OrdinalIgnoreCase))
-            return raw[..^5].Trim() + " mi";
-        return raw;
-    }
-
     private static double ParseDistanceValue(string dist)
     {
         if (string.IsNullOrEmpty(dist)) return 999;
@@ -865,33 +854,6 @@ public partial class CouncilToolService
         return "";
     }
 
-    private static string ExtractFirstHeading(HtmlNode node)
-    {
-        var h = node.SelectSingleNode(".//h1 | .//h2 | .//h3 | .//h4 | .//strong");
-        return h != null ? CleanText(h.InnerText) : "";
-    }
-
-    private static string ExtractAddress(string text)
-    {
-        // Look for postcode pattern in the text
-        var match = Regex.Match(text, @"[A-Z0-9 ,]+,\s*BD\d{1,2}\s*\d[A-Z]{2}", RegexOptions.IgnoreCase);
-        return match.Success ? match.Value.Trim() : "";
-    }
-
-    private static string NormaliseOfstedLabel(string raw) => raw.Trim().ToLower() switch
-    {
-        "1" or "outstanding"           => "Outstanding",
-        "2" or "good"                  => "Good",
-        "3" or "requires improvement"  => "Requires Improvement",
-        "4" or "inadequate"            => "Inadequate",
-        "0" or "not yet inspected" or "" or "n/a" => "",
-        var s when s.Contains("outstanding")  => "Outstanding",
-        var s when s.Contains("good")         => "Good",
-        var s when s.Contains("requires")     => "Requires Improvement",
-        var s when s.Contains("inadequate")   => "Inadequate",
-        var s                                  => s
-    };
-
     // ── Infer age range from school phase / name ──────────────────────────────
     private static string InferAgeRange(string phase, string name)
     {
@@ -1071,31 +1033,4 @@ public partial class CouncilToolService
         }
     }
 
-    // ── Geo helpers ───────────────────────────────────────────────────────────
-    private async Task<(double lat, double lon)> GetLatLonAsync(string postcode, CancellationToken ct)
-    {
-        try
-        {
-            var json = await FetchHtmlAsync(
-                $"https://api.postcodes.io/postcodes/{Uri.EscapeDataString(postcode)}", ct);
-            if (json == null) return (0, 0);
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("result", out var r))
-                return (r.GetProperty("latitude").GetDouble(), r.GetProperty("longitude").GetDouble());
-        }
-        catch { }
-        return (0, 0);
-    }
-
-    private static double HaversineDistanceMi(double lat1, double lon1, double lat2, double lon2)
-    {
-        if (lat2 == 0 && lon2 == 0) return 999;
-        const double R = 3958.8;
-        var dLat = (lat2 - lat1) * Math.PI / 180;
-        var dLon = (lon2 - lon1) * Math.PI / 180;
-        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
-              + Math.Cos(lat1 * Math.PI / 180) * Math.Cos(lat2 * Math.PI / 180)
-              * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-        return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-    }
 }

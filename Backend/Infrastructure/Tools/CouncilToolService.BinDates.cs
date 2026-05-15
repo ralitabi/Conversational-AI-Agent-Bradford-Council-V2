@@ -582,19 +582,6 @@ public partial class CouncilToolService
             .ToList();
     }
 
-    // ── Scraped comprehensive bin info (kept, not in main flow) ──────────────
-    private async Task<string> ScrapeComprehensiveBinInfoAsync(CancellationToken ct)
-    {
-        var pages = new[]
-        {
-            "https://www.bradford.gov.uk/recycling-and-waste/bin-collections/",
-            "https://www.bradford.gov.uk/recycling-and-waste/what-can-i-recycle/"
-        };
-        var tasks = pages.Select(url => FetchPageTextAsync(url, ct)).ToList();
-        await Task.WhenAll(tasks);
-        return string.Join("\n\n---\n\n", tasks.Select(t => t.Result).Where(r => !string.IsNullOrWhiteSpace(r)));
-    }
-
     private async Task<string> FetchPageTextAsync(string url, CancellationToken ct)
     {
         var html = await FetchHtmlAsync(url, ct);

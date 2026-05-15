@@ -48,37 +48,189 @@ public partial class CouncilToolService
         sb.AppendLine("[[/BIN_DATE_CARD]]");
         sb.AppendLine();
 
+        // IMPORTANT: keep the text reply very short — the card below already shows the full schedule.
+        // Never repeat the schedule table or links in the text.
         if (hasRealDates)
         {
-            var greyNext  = card.GreyBinDates.FirstOrDefault()  ?? card.GreyBin;
-            var greenNext = card.GreenBinDates.FirstOrDefault() ?? card.GreenBin;
-            var brownNext = card.BrownBinDates.FirstOrDefault() ?? card.BrownBin;
-
-            sb.AppendLine($"BIN_INSTRUCTION: Real collection dates retrieved for {address}, {postcode}.");
-            sb.AppendLine($"- Grey bin (recycling): next on **{greyNext}**");
-            sb.AppendLine($"- Green bin (general waste): next on **{greenNext}**");
-            if (!string.IsNullOrWhiteSpace(brownNext) && !brownNext.StartsWith("See"))
-                sb.AppendLine($"- Brown bin (garden waste): next on **{brownNext}**");
-            sb.AppendLine("The UI shows the full upcoming schedule. Remind user to check bradford.gov.uk for the latest.");
+            var greyNext = card.GreyBinDates.FirstOrDefault() ?? card.GreyBin;
+            sb.AppendLine($"BIN_INSTRUCTION: Write ONE sentence only: confirm the address ({address}, {postcode}) and say the collection schedule is shown in the card below. Mention grey bin next collects on **{greyNext}**. Do NOT list all bins, do NOT add a table, do NOT repeat links — the card already shows everything.");
         }
         else
         {
-            sb.AppendLine($"BIN_INSTRUCTION: Bradford's bin date system requires a web form that cannot be automated — exact next-collection dates are not available here. The UI shows the collection schedule. Tell the user their collection schedule and give them the direct link: {checkerUrl}. Say: 'For your exact next collection dates, tap the button below.'");
+            sb.AppendLine($"BIN_INSTRUCTION: Write ONE sentence only: confirm the address ({address}, {postcode}) and say the collection schedule is shown in the card below. Do NOT add a schedule table, do NOT list links — the card shows the Grey/Green/Brown schedule and the 'Get exact dates' button already.");
         }
 
+        return sb.ToString();
+    }
+
+    // ── Bin knowledge base ────────────────────────────────────────────────────
+    // Maps every common bin/recycling topic to the authoritative Bradford Council page(s).
+    private static readonly (string[] Keywords, string[] Urls, string Title, string FollowUp)[] BinKnowledgeMap =
+    {
+        // What goes in each bin
+        (new[]{"what goes","grey bin","green bin","recycle","recycling","plastic","cardboard","glass","paper","tin","can","yoghurt","bottle","carton","black tray","food tray","shredded paper","aerosol"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/wheeled-bins-and-recycling-containers/what-goes-in-your-bins/"},
+         "What goes in your bins",
+         "Would you like to know when your bins are collected? I can check your collection dates if you share your postcode."),
+
+        // General bin schedule for Bradford district
+        (new[]{"collection days","collection schedule","which day","what day","alternating","fortnightly","alternate week","general waste","grey bin schedule","green bin schedule","brown bin schedule","when are bins","bin day","collection frequency"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/bin-collections/bin-collections-in-the-bradford-district/"},
+         "Bin collections in the Bradford district",
+         "Would you like me to check your exact bin collection dates? Just share your postcode and I can look it up."),
+
+        // Missed collection
+        (new[]{"missed","not collected","wasn't collected","wasn't emptied","skip","forgot","didn't collect","report missed","delay","broken truck","waiting"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/bin-collections/report-a-missed-bin-collection/"},
+         "Report a missed bin collection",
+         "Would you like to check your upcoming bin collection dates to plan ahead?"),
+
+        // Food waste
+        (new[]{"food waste","food bin","caddy","kitchen waste","food scraps","simpler recycling","autumn 2026","food collection","organic"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/bin-collections/food-waste-collection/"},
+         "Food waste collection",
+         "Would you like to know what else can go in your recycling or general waste bin?"),
+
+        // Assisted collections
+        (new[]{"assisted","can't move","can not move","disabled","elderly","mobility","neighbour","help with bin","unable to move"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/bin-collections/assisted-collections-help-moving-your-bins/"},
+         "Assisted bin collections",
+         "Would you like to check your bin collection dates or find out about other support services?"),
+
+        // Bad weather
+        (new[]{"bad weather","snow","ice","frost","cancelled","disruption","disrupted","weather","delayed","winter","storm"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/bin-collections/bin-collections-in-bad-weather/"},
+         "Bin collections in bad weather",
+         "Would you like to check your regular bin collection schedule?"),
+
+        // Garden waste / brown bin
+        (new[]{"garden waste","brown bin","garden bin","subscribe","subscription","composting","grass cuttings","leaves","branches","hedge","garden service","renew","june 2026","cost of garden","garden waste cost","four weeks","garden collection"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/garden-waste-bin/subscribe-to-or-renew-the-garden-waste-collection-service/",
+               "https://www.bradford.gov.uk/recycling-and-waste/garden-waste-bin/garden-waste-bin/"},
+         "Garden waste bin subscription",
+         "Would you like to know what else goes in the brown bin, or check your collection dates?"),
+
+        // Bulky waste
+        (new[]{"bulky","large items","furniture","sofa","mattress","fridge","washing machine","cooker","wardrobe","bed","chair","bulky waste","big item","white goods cost","collect large"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/bulky-waste/bulky-waste-collections/"},
+         "Bulky waste collections",
+         "Did you know Bradford also offers free collection for certain electrical items? Would you like details?"),
+
+        // New or replacement bins
+        (new[]{"new bin","replacement bin","extra bin","damaged bin","broken bin","bin repair","lost bin","stolen bin","bigger bin","smaller bin","bin cost","bin charge","140 litre","240 litre"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/wheeled-bins-and-recycling-containers/get-new-wheeled-bins-or-recycling-containers/"},
+         "Get new or replacement bins",
+         "Would you like to know what goes in each of your bins?"),
+
+        // Rural collections
+        (new[]{"rural","hard to reach","rural vehicle","smaller vehicle","access restriction","country","village"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/bin-collections/rural-collections/"},
+         "Rural bin collections",
+         "Would you like to check your bin collection dates for your specific address?"),
+
+        // Household waste recycling centres / tips
+        (new[]{"recycling centre","tip","household waste site","hwrc","skip","drop off","dispose","plasterboard","permit","van permit"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/household-waste-recycling-centres/search-household-waste-sites/"},
+         "Household waste recycling centres",
+         "Would you like to know about hazardous or electrical waste disposal options?"),
+
+        // Electrical items
+        (new[]{"electrical","electricals","tv","television","fridge","freezer","washing machine","computer","laptop","phone","small appliance","weee","e-waste","electronic"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/bulky-waste/getting-rid-of-electrical-items/"},
+         "Getting rid of electrical items",
+         "Would you like to know about bulky waste collections for large items like fridges or washing machines?"),
+
+        // Clinical / medical / sharps
+        (new[]{"clinical","medical waste","dialysis","sharps","needle","syringe","lancet","insulin","prescription"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/hazardous-waste/syringes-needles-and-sharps-bins/",
+               "https://www.bradford.gov.uk/recycling-and-waste/hazardous-waste/clinical-collections/"},
+         "Sharps and clinical waste disposal",
+         "Would you like information about other hazardous waste disposal options?"),
+
+        // Hazardous
+        (new[]{"hazardous","chemical","asbestos","paint","oil","battery","batteries","solvent","pesticide","bleach","toxic"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/hazardous-waste/hazardous-waste/"},
+         "Hazardous waste disposal",
+         "Would you like to find your nearest household waste recycling centre to drop off hazardous items?"),
+
+        // Aluminium foil
+        (new[]{"aluminium foil","foil","tin foil","kitchen foil"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/wheeled-bins-and-recycling-containers/aluminium-foil/"},
+         "Recycling aluminium foil",
+         "Would you like to know what else can go in your recycling bin?"),
+
+        // General fallback
+        (new[]{"bin","recycling","waste","collection","rubbish","refuse","litter"},
+         new[]{"https://www.bradford.gov.uk/recycling-and-waste/bin-collections/bin-collections-in-the-bradford-district/",
+               "https://www.bradford.gov.uk/recycling-and-waste/wheeled-bins-and-recycling-containers/what-goes-in-your-bins/"},
+         "Bin collections and recycling in Bradford",
+         "Would you like to check your bin collection dates? Share your postcode and I can look it up for you."),
+    };
+
+    private async Task<string> GetBinInfoAsync(string query, CancellationToken ct)
+    {
+        var q = query.ToLower();
+
+        // Match keywords to get the relevant URL(s), title, and follow-up
+        var urls    = new List<string>();
+        var title   = "";
+        var followUp = "";
+
+        foreach (var (keywords, pages, pageTitle, pageFollowUp) in BinKnowledgeMap)
+        {
+            if (keywords.Any(k => q.Contains(k, StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (var u in pages)
+                    if (!urls.Contains(u)) urls.Add(u);
+                if (string.IsNullOrEmpty(title))
+                {
+                    title    = pageTitle;
+                    followUp = pageFollowUp;
+                }
+                if (urls.Count >= 2) break;
+            }
+        }
+
+        // Fallback if nothing matched
+        if (urls.Count == 0)
+        {
+            urls.Add("https://www.bradford.gov.uk/recycling-and-waste/bin-collections/bin-collections-in-the-bradford-district/");
+            title    = "Bin collections in Bradford";
+            followUp = "Would you like to check your bin collection dates? Share your postcode and I can look it up for you.";
+        }
+
+        // Scrape up to 2 pages (keep total under ~6 000 chars)
+        var sb = new StringBuilder();
+        sb.AppendLine($"BRADFORD BIN & RECYCLING INFORMATION — query: \"{query}\"");
         sb.AppendLine();
-        sb.AppendLine("| Bin | Schedule | Contents |");
-        sb.AppendLine("|-----|----------|----------|");
-        sb.AppendLine("| 🗑️ Grey | Every 2 weeks | General household waste |");
-        sb.AppendLine("| ♻️ Green | Every 2 weeks (alternating with grey) | Paper, cardboard, glass, plastic, tins |");
-        sb.AppendLine("| 🌿 Brown | Weekly Apr–Nov · Every 2 weeks Dec–Mar | Garden waste (subscription required) |");
-        sb.AppendLine();
-        sb.AppendLine("**Do not put in any bin:** electricals, batteries, paint, oils, syringes, textiles, or large unflattened cardboard.");
-        sb.AppendLine();
-        sb.AppendLine($"- [Get your exact collection dates]({checkerUrl})");
-        sb.AppendLine("- [Report a missed collection](https://www.bradford.gov.uk/recycling-and-waste/bin-collections/missed-bin-collections/)");
-        sb.AppendLine("- [Brown bin subscription](https://www.bradford.gov.uk/recycling-and-waste/bin-collections/brown-bin-subscription/)");
-        sb.AppendLine("- [Book bulky waste collection](https://www.bradford.gov.uk/recycling-and-waste/bulky-waste-collections/)");
+
+        foreach (var url in urls.Take(2))
+        {
+            var html = await FetchHtmlAsync(url, ct);
+            if (string.IsNullOrEmpty(html)) continue;
+
+            var doc = new HtmlAgilityPack.HtmlDocument();
+            doc.LoadHtml(html);
+            foreach (var tag in new[] { "nav", "header", "footer", "script", "style", "aside", "noscript" })
+            {
+                var nodes = doc.DocumentNode.SelectNodes($"//{tag}");
+                if (nodes != null) foreach (var n in nodes.ToList()) n.Remove();
+            }
+            var main = doc.DocumentNode.SelectSingleNode("//main")
+                    ?? doc.DocumentNode.SelectSingleNode("//article")
+                    ?? doc.DocumentNode.SelectSingleNode("//body");
+            if (main == null) continue;
+
+            var text = CleanText(main.InnerText);
+            sb.AppendLine($"--- SOURCE: {url} ---");
+            sb.AppendLine(TruncateText(text, 3500));
+            sb.AppendLine();
+        }
+
+        // Append official link and follow-up suggestion
+        sb.AppendLine($"OFFICIAL_BRADFORD_LINK: [{title}]({urls[0]})");
+        if (!string.IsNullOrEmpty(followUp))
+            sb.AppendLine($"FOLLOW_UP_SUGGESTION: {followUp}");
 
         return sb.ToString();
     }

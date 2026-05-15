@@ -7,8 +7,8 @@ let settingsOpen          = false;
 let _chipsDisplay         = '';
 let sessionProfileInjected = false;
 
-/* Person icon SVGs — matches React AssistantAvatar / UserAvatar */
-const ALEX_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="#0f4ca3" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19c1.4-3 4-4.5 6.5-4.5S17 16 18.5 19"/></svg>`;
+/* Bradford Council crest — council logo as agent avatar */
+const ALEX_ICON = `<img src="https://www.bradford.gov.uk/css/2025/images/crest.svg" alt="Bradford Council" style="width:100%;height:100%;object-fit:cover;object-position:left center;display:block;" />`;
 const USER_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="#fff"   stroke-width="1.8" width="18" height="18"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 19c1.4-3 4-4.5 6.5-4.5S17 16 18.5 19"/></svg>`;
 
 /* ── Open / close ── */
@@ -195,22 +195,26 @@ function finaliseStreamBubble(div, text, addresses, binDates, libraries, council
   if (timeEl) { timeEl.textContent = now(); timeEl.style.display = ''; }
   saveToCurrentSession('alex', text);
 
-  // Add structured cards
-  const wrapper = div.querySelector('.bubble.alex-bubble').parentElement;
-  let extras = '';
-  if (addresses && addresses.length > 0)       extras += buildAddressCard(addresses);
-  if (binDates)                                 extras += buildBinDateCard(binDates);
-  if (libraries && libraries.length > 0)       extras += buildLibraryCard(libraries);
-  if (ctProperties && ctProperties.length > 0) extras += buildCouncilTaxPropertyPicker(ctProperties);
-  else if (councilTax)                          extras += buildCouncilTaxCard(councilTax);
-  if (schools && schools.length > 0)           extras += buildSchoolListCard(schools);
-  if (schoolDetails)                            extras += buildSchoolCard(schoolDetails);
-  if (extras) wrapper.insertAdjacentHTML('beforeend', extras);
-
-  // Run multi-bubble split on finalised text
+  // Split text first so we know whether there are multiple bubbles
   const parts = splitIntoMessages(text);
   const firstBubble = div.querySelector('.bubble.alex-bubble');
   if (firstBubble) firstBubble.querySelector('.stream-text').innerHTML = renderMarkdown(parts[0] ?? text);
+
+  // Cards attach to the LAST bubble only.
+  // Single bubble: add immediately. Multiple bubbles: skip here, last appendAlexBubble handles it.
+  if (parts.length <= 1) {
+    const wrapper = div.querySelector('.bubble.alex-bubble').parentElement;
+    let extras = '';
+    if (addresses && addresses.length > 0)       extras += buildAddressCard(addresses);
+    if (binDates)                                 extras += buildBinDateCard(binDates);
+    if (libraries && libraries.length > 0)       extras += buildLibraryCard(libraries);
+    if (ctProperties && ctProperties.length > 0) extras += buildCouncilTaxPropertyPicker(ctProperties);
+    else if (councilTax)                          extras += buildCouncilTaxCard(councilTax);
+    if (schools && schools.length > 0)           extras += buildSchoolListCard(schools);
+    if (schoolDetails)                            extras += buildSchoolCard(schoolDetails);
+    if (extras) wrapper.insertAdjacentHTML('beforeend', extras);
+  }
+
   if (parts.length > 1) {
     let delay = Math.min(1600, parts[0].length * 20 + 600);
     for (let i = 1; i < parts.length; i++) {
@@ -240,7 +244,8 @@ function splitIntoMessages(text) {
   for (const para of paras) {
     const isHeading  = /^#{1,3}\s/.test(para);
     const isListPara = para.split('\n').filter(Boolean).every(l => /^[-•*]|\d+\./.test(l.trim()));
-    const shouldCut  = (isHeading && cur.length > 80) || (!isListPara && cur.length > 360 && cur.trim());
+    // Also split when a new ## heading starts — each ## section = its own bubble
+    const shouldCut  = (isHeading && cur.length > 40) || (!isListPara && cur.length > 320 && cur.trim());
     if (shouldCut) { if (cur.trim()) chunks.push(cur.trim()); cur = para; }
     else           { cur += (cur ? '\n\n' : '') + para; }
   }
@@ -417,23 +422,26 @@ function buildBinDateCard(bin) {
   const greenOk = hasDates && bin.greenBin && !bin.greenBin.includes('Check');
   const brownOk = hasDates && bin.brownBin && !bin.brownBin.includes('Check') && !bin.brownBin.includes('See');
 
-  // Build schedule table rows for each bin type
-  function scheduleRows(dates, icon, label, ok) {
+  // Build schedule rows — use actual dates when available, otherwise backend schedule text
+  function scheduleRows(dates, label, ok) {
     const next = (dates && dates.length > 0) ? dates[0] : null;
     const rest = (dates && dates.length > 1) ? dates.slice(1) : [];
     return `<div class="bin-row">
-      <div class="bin-icon">${icon}</div>
+      <div class="bin-type-badge bin-badge-${label.toLowerCase().replace(' bin','').trim()}">${label}</div>
       <div class="bin-info">
-        <span class="bin-label">${label}</span>
-        <span class="bin-date ${ok ? 'has-date' : ''}">${next ? esc(next) : (ok ? '' : (label.includes('Grey') ? 'Every 2 weeks — general waste' : label.includes('Green') ? 'Every 2 weeks — recycling' : 'Weekly Apr–Nov · Every 2 weeks Dec–Mar'))}</span>
+        <span class="bin-date ${ok ? 'has-date' : 'bin-schedule'}">${next ? esc(next) : ''}</span>
         ${rest.length > 0 ? `<span class="bin-upcoming">${rest.map(d => esc(d)).join(' &nbsp;·&nbsp; ')}</span>` : ''}
       </div>
     </div>`;
   }
 
-  const greyDates  = (bin.greyBinDates  && bin.greyBinDates.length  > 0) ? bin.greyBinDates  : (greyOk  ? [bin.greyBin]  : []);
-  const greenDates = (bin.greenBinDates && bin.greenBinDates.length > 0) ? bin.greenBinDates : (greenOk ? [bin.greenBin] : []);
-  const brownDates = (bin.brownBinDates && bin.brownBinDates.length > 0) ? bin.brownBinDates : (brownOk ? [bin.brownBin] : []);
+  // Use backend schedule text even when hasDates=false (it has accurate schedule descriptions)
+  const greyDates  = (bin.greyBinDates  && bin.greyBinDates.length  > 0) ? bin.greyBinDates
+                   : bin.greyBin  ? [bin.greyBin]  : ['Every 2 weeks'];
+  const greenDates = (bin.greenBinDates && bin.greenBinDates.length > 0) ? bin.greenBinDates
+                   : bin.greenBin ? [bin.greenBin] : ['Every 2 weeks (alternating with grey)'];
+  const brownDates = (bin.brownBinDates && bin.brownBinDates.length > 0) ? bin.brownBinDates
+                   : bin.brownBin ? [bin.brownBin] : ['Weekly Apr–Nov · Fortnightly Dec–Mar'];
 
   const exactDatesBtn = !hasDates ? `
     <a href="${checkerUrl}" target="_blank" class="bin-exact-btn">
@@ -447,12 +455,16 @@ function buildBinDateCard(bin) {
       Bin collection — <span>${esc(bin.address || '')}</span>
     </div>
     <div class="bin-rows">
-      ${scheduleRows(greyDates,  '🗑️', 'Grey Bin',  greyOk)}
-      ${scheduleRows(greenDates, '♻️', 'Green Bin', greenOk)}
-      ${scheduleRows(brownDates, '🌿', 'Brown Bin', brownOk)}
+      ${scheduleRows(greyDates,  'Grey Bin',  greyOk)}
+      ${scheduleRows(greenDates, 'Green Bin', greenOk)}
+      ${scheduleRows(brownDates, 'Brown Bin', brownOk)}
     </div>
+    ${!hasDates ? `<div class="bin-note">Exact next collection dates require Bradford's online form — tap below to check.</div>` : ''}
     ${exactDatesBtn}
-    <a href="${checkerUrl}" target="_blank" class="bin-link">${hasDates ? 'Check for updates on bradford.gov.uk →' : 'Open Bradford bin checker →'}</a>
+    <div class="bin-footer-links">
+      <a href="${checkerUrl}" target="_blank" class="bin-link">${hasDates ? 'Check for updates →' : 'Open bin checker →'}</a>
+      <a href="https://www.bradford.gov.uk/recycling-and-waste/bin-collections/report-a-missed-bin-collection/" target="_blank" class="bin-link">Report missed collection →</a>
+    </div>
   </div>`;
 }
 
@@ -511,44 +523,130 @@ function selectSchool(name) {
 /* ── School detail card ── */
 function buildSchoolCard(s) {
   if (!s) return '';
-  const badge = s.ofstedRating
-    ? `<span class="ofsted-badge ${ofstedClass(s.ofstedRating)}">${esc(s.ofstedRating)}</span>`
-    : '';
-  const ofstedDateStr = s.ofstedDate ? ` (${esc(s.ofstedDate)})` : '';
-  const phoneRow = s.phone
-    ? `<div class="sch-detail-row"><span class="sch-dl">Phone</span><span class="sch-dv"><a href="tel:${esc(s.phone)}">${esc(s.phone)}</a></span></div>`
-    : '';
-  const siteRow = s.website
-    ? `<div class="sch-detail-row"><span class="sch-dl">Website</span><span class="sch-dv"><a href="${esc(s.website)}" target="_blank" rel="noopener">Visit school website ↗</a></span></div>`
-    : '';
+
+  const ofstedDateStr = s.ofstedDate ? ` · ${esc(s.ofstedDate)}` : '';
+  const admUrl   = s.admissionsUrl || 'https://www.bradford.gov.uk/education-and-skills/school-admissions/apply-for-a-place-at-one-of-bradford-districts-schools/';
+  const ofstUrl  = s.ofstedUrl     || 'https://reports.ofsted.gov.uk/';
+  const transpUrl= s.transportUrl  || 'https://www.bradford.gov.uk/education-and-skills/travel-assistance/assistance-with-travel-to-home-school-and-college/';
+  const mealsUrl = s.freeMealsUrl  || 'https://www.bradford.gov.uk/education-and-skills/school-meals/paying-for-school-meals/';
+  const termUrl  = s.termDatesUrl  || 'https://www.bradford.gov.uk/education-and-skills/school-holidays-and-term-dates/school-holidays-and-term-dates/';
+
+  // Ofsted colour
+  const oKey = !s.ofstedRating ? 'default'
+    : s.ofstedRating.toLowerCase().includes('outstanding') ? 'outstanding'
+    : s.ofstedRating.toLowerCase().includes('good')        ? 'good'
+    : s.ofstedRating.toLowerCase().includes('requires')    ? 'requires'
+    : s.ofstedRating.toLowerCase().includes('inadequate')  ? 'inadequate' : 'default';
+  const ofstedColors = {
+    outstanding:{ bg:'#dcfce7',color:'#14532d',border:'#86efac'},
+    good:       { bg:'#dbeafe',color:'#1e3a8a',border:'#93c5fd'},
+    requires:   { bg:'#fef9c3',color:'#713f12',border:'#fde047'},
+    inadequate: { bg:'#fee2e2',color:'#7f1d1d',border:'#fca5a5'},
+    default:    { bg:'#f1f5f9',color:'#475569',border:'#cbd5e1'}
+  };
+  const oc = ofstedColors[oKey];
+  const typeColor = s.type && s.type.toLowerCase().includes('academy')
+    ? {bg:'#ede9fe',color:'#4c1d95',border:'#c4b5fd'}
+    : {bg:'#e0f2fe',color:'#0c4a6e',border:'#7dd3fc'};
+
+  // ── Facilities ──
+  const facs = s.facilities || [];
+  // Strip emojis from facility labels
+  const stripEmoji = t => t.replace(/[\u{1F300}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}]/gu,'').replace(/^\s+/,'');
+  const facsHtml = facs.length > 0 ? `
+    <div class="sch-facs-section">
+      <p class="sch-section-label">Facilities &amp; Clubs</p>
+      <div class="sch-facs-grid">${facs.map(f => `<span class="sch-fac-chip">${esc(stripEmoji(f))}</span>`).join('')}</div>
+    </div>` : '';
+
+  // ── Term dates calendar (collapsed by default) ──
+  const periods  = s.termPeriods || [];
+  const upcoming = periods.filter(p => !p.past);
+  const past     = periods.filter(p => p.past);
+  const typeConf = {
+    term:     {dot:'#7dd3fc',bg:'#f0f9ff',border:'#bae6fd',color:'#0369a1'},
+    halfterm: {dot:'#fde047',bg:'#fefce8',border:'#fde68a',color:'#854d0e'},
+    christmas:{dot:'#fca5a5',bg:'#fef2f2',border:'#fca5a5',color:'#991b1b'},
+    easter:   {dot:'#86efac',bg:'#f0fdf4',border:'#86efac',color:'#166534'},
+    summer:   {dot:'#fdba74',bg:'#fff7ed',border:'#fdba74',color:'#c2410c'}
+  };
+  const renderPeriods = (list, faded) => list.map(p => {
+    const c = typeConf[p.type] || typeConf.halfterm;
+    return `<div class="td-chip" style="background:${c.bg};border-color:${c.border};color:${c.color};${faded?'opacity:.4;':''}">
+      <span class="td-dot" style="background:${c.dot}"></span>
+      <div class="td-info"><span class="td-label">${esc(p.label)}</span><span class="td-dates">${esc(p.dates)}</span></div>
+    </div>`;
+  }).join('');
+
+  const termHtml = periods.length > 0 ? `
+    <details class="sch-term-details">
+      <summary class="sch-term-summary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Term Dates &amp; Holidays
+        <span class="sch-term-year">${esc(s.academicYear||'2025/26 & 2026/27')}</span>
+        ${s.isAcademy ? '<span class="sch-academy-note">Academy — may vary</span>' : ''}
+        <span class="sch-term-arrow">▾</span>
+      </summary>
+      <div class="sch-term-body">
+        ${upcoming.length > 0 ? `<div class="td-grid">${renderPeriods(upcoming,false)}</div>` : ''}
+        ${past.length > 0 ? `
+          <details class="td-past-wrap">
+            <summary>Show past dates (${past.length})</summary>
+            <div class="td-grid">${renderPeriods(past,true)}</div>
+          </details>` : ''}
+        <a href="${esc(termUrl)}" target="_blank" class="td-link">
+          View full calendar on ${s.isAcademy ? 'school website' : 'bradford.gov.uk'} →
+        </a>
+      </div>
+    </details>` : '';
 
   return `
     <div class="sch-card">
-      <div class="sch-card-head">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
-        <span>${esc(s.name)}</span>
-        ${badge}
+
+      <div class="sch-card-hero">
+        <div class="sch-hero-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" width="22" height="22"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+        </div>
+        <div class="sch-hero-info">
+          <h3 class="sch-hero-name">${esc(s.name)}</h3>
+          <div class="sch-hero-tags">
+            ${s.phase ? `<span class="sch-tag" style="background:#e0f2fe;color:#0c4a6e;border-color:#7dd3fc">${esc(s.phase)}</span>` : ''}
+            ${s.type  ? `<span class="sch-tag" style="background:${typeColor.bg};color:${typeColor.color};border-color:${typeColor.border}">${esc(s.type)}</span>` : ''}
+            ${s.ofstedRating ? `<span class="sch-tag" style="background:${oc.bg};color:${oc.color};border-color:${oc.border}">Ofsted: ${esc(s.ofstedRating)}${ofstedDateStr}</span>` : `<span class="sch-tag" style="background:#f1f5f9;color:#64748b;border-color:#cbd5e1">Ofsted: Not yet rated</span>`}
+          </div>
+        </div>
       </div>
-      <div class="sch-details">
-        ${s.address  ? `<div class="sch-detail-row"><span class="sch-dl">Address</span><span class="sch-dv">${esc(s.address)}</span></div>` : ''}
-        ${s.phase    ? `<div class="sch-detail-row"><span class="sch-dl">Phase</span><span class="sch-dv">${esc(s.phase)}</span></div>` : ''}
-        ${s.type     ? `<div class="sch-detail-row"><span class="sch-dl">Type</span><span class="sch-dv">${esc(s.type)}</span></div>` : ''}
-        ${s.ageRange ? `<div class="sch-detail-row"><span class="sch-dl">Ages</span><span class="sch-dv">${esc(s.ageRange)}</span></div>` : ''}
-        ${s.pupils   ? `<div class="sch-detail-row"><span class="sch-dl">Pupils</span><span class="sch-dv">${esc(s.pupils)}</span></div>` : ''}
-        <div class="sch-detail-row"><span class="sch-dl">Ofsted</span><span class="sch-dv">${esc(s.ofstedRating||'Not yet inspected')}${ofstedDateStr}</span></div>
-        ${phoneRow}
-        ${siteRow}
+
+      <div class="sch-info-grid">
+        ${s.address     ? `<div class="sch-info-row"><span class="sch-info-icon">📍</span><div><span class="sch-info-label">Address</span><span class="sch-info-val">${esc(s.address)}</span></div></div>` : ''}
+        ${s.headteacher ? `<div class="sch-info-row"><div class="sch-info-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" width="14" height="14"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div><div><span class="sch-info-label">Headteacher</span><span class="sch-info-val">${esc(s.headteacher)}</span></div></div>` : ''}
+        ${s.ageRange    ? `<div class="sch-info-row"><div class="sch-info-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" width="14" height="14"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><div><span class="sch-info-label">Age Range</span><span class="sch-info-val sch-age-highlight">${esc(s.ageRange)}</span></div></div>` : ''}
+        ${s.phone       ? `<div class="sch-info-row"><div class="sch-info-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" width="14" height="14"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div><div><span class="sch-info-label">Phone</span><span class="sch-info-val"><a href="tel:${esc(s.phone)}">${esc(s.phone)}</a></span></div></div>` : ''}
+        ${s.website     ? `<div class="sch-info-row"><div class="sch-info-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div><div><span class="sch-info-label">Website</span><span class="sch-info-val"><a href="${esc(s.website)}" target="_blank" rel="noopener">${esc(s.website.replace(/^https?:\/\//,''))}</a></span></div></div>` : ''}
+        ${s.pupils      ? `<div class="sch-info-row"><div class="sch-info-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" width="14" height="14"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><div><span class="sch-info-label">Number on Roll</span><span class="sch-info-val">${esc(s.pupils)}</span></div></div>` : ''}
       </div>
-      <div class="sch-card-actions">
-        <a href="${esc(s.admissionsUrl||'https://www.bradford.gov.uk/education-and-skills/schools/school-admissions/')}" target="_blank" class="sch-action-btn sch-btn-primary">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+
+      ${facsHtml}
+      ${termHtml}
+
+      <div class="sch-action-row">
+        <a href="${esc(admUrl)}" target="_blank" class="sch-act-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           Apply for a school place
         </a>
-        <a href="${esc(s.ofstedUrl||'https://reports.ofsted.gov.uk/')}" target="_blank" class="sch-action-btn sch-btn-secondary">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <a href="${esc(ofstUrl)}" target="_blank" class="sch-act-ghost">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           Ofsted report
         </a>
       </div>
+
+      <div class="sch-quick-links">
+        <a href="${esc(mealsUrl)}" target="_blank" class="sch-ql">Free school meals</a>
+        <a href="${esc(transpUrl)}" target="_blank" class="sch-ql">School transport</a>
+        <a href="https://www.bradford.gov.uk/education-and-skills/school-support-services/school-support-services/" target="_blank" class="sch-ql">SEND support</a>
+        <a href="https://www.bradford.gov.uk/education-and-skills/school-admissions/about-school-admissions/" target="_blank" class="sch-ql">Admissions guide</a>
+      </div>
+
     </div>`;
 }
 
@@ -777,7 +875,7 @@ function renderMarkdown(raw) {
     html += `<p>${inline(line)}</p>`;
   }
   flushTable(); closeOl(); closeUl();
-  return html;
+  return autoLink(html);
 }
 
 function inline(t) {
@@ -785,7 +883,26 @@ function inline(t) {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g,     '<em>$1</em>')
     .replace(/`(.+?)`/g,       '<code>$1</code>')
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+
+/* Auto-link phones, emails, bare URLs that aren't already inside <a> tags */
+function autoLink(html) {
+  // Split on existing <a> tags — odd-indexed parts are already linked, skip them
+  const parts = html.split(/(<a\b[^>]*>[\s\S]*?<\/a>)/);
+  return parts.map((chunk, i) => {
+    if (i % 2 === 1) return chunk;
+    return chunk
+      // UK landline / mobile: 01274 439450 · 07123 456789
+      .replace(/(0\d{4}\s\d{6,7})/g, p =>
+        `<a href="tel:${p.replace(/\s+/g,'')}" class="auto-tel">${p}</a>`)
+      // Email addresses
+      .replace(/([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g, e =>
+        `<a href="mailto:${e}" class="auto-email">${e}</a>`)
+      // Bare https URLs not already linked (not followed by ) which means inside markdown)
+      .replace(/\bhttps?:\/\/[^\s<>"&\)]+/g, u =>
+        `<a href="${u}" target="_blank" rel="noopener" class="auto-url">${u}</a>`);
+  }).join('');
 }
 
 /* ── Helpers ── */

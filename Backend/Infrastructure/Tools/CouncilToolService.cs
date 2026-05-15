@@ -31,7 +31,7 @@ public partial class CouncilToolService : IToolService
             Function = new FunctionDef
             {
                 Name        = "lookup_addresses_for_postcode",
-                Description = "Look up real UK property addresses for a Bradford postcode. ALWAYS call this first when the user provides a postcode for bin collection. Returns a numbered list of addresses so the user can select theirs.",
+                Description = "Look up real UK property addresses for a Bradford postcode. ALWAYS call this first when the user provides a postcode for bin collection DATES (i.e. they want to know WHEN their bin is collected). Do NOT call this for missed collections, bin info, or recycling questions.",
                 Parameters  = new
                 {
                     type       = "object",
@@ -197,13 +197,14 @@ public partial class CouncilToolService : IToolService
             Function = new FunctionDef
             {
                 Name        = "get_school_details",
-                Description = "Get full details for a specific Bradford school including Ofsted rating, type, age range, number of pupils, contact info, admissions link, and Ofsted report link. Call this when the user selects or asks about a specific school.",
+                Description = "Get full details for a specific Bradford school including phase, type, headteacher, address, phone, website, and links. Call this when the user selects or asks about a specific school. Pass the urn if available from a previous school list.",
                 Parameters  = new
                 {
                     type       = "object",
                     properties = new
                     {
-                        school_name = new { type = "string", description = "Name of the school e.g. 'Thornton Primary School', 'Belle Vue Girls' Academy'" }
+                        school_name = new { type = "string", description = "Name of the school" },
+                        urn         = new { type = "string", description = "BSO URN number if known from a previous school list result e.g. '50082'" }
                     },
                     required = new[] { "school_name" }
                 }
@@ -225,6 +226,48 @@ public partial class CouncilToolService : IToolService
                     required = new[] { "topic" }
                 }
             }
+        },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "get_bin_info",
+                Description = "Get detailed Bradford Council bin and recycling information scraped live from bradford.gov.uk. CALL THIS for: 'my bin wasn't collected / was missed', 'what goes in grey/green/brown bin', 'garden waste subscription cost', 'book bulky waste', 'bad weather bin', 'assisted collection', 'new/replacement bin', 'food waste rollout', 'rural collection', 'recycling centre / tip', 'hazardous waste', 'electrical items', 'sharps/needles', 'aluminium foil'. Do NOT call this for checking collection dates for a specific address.",
+                Parameters  = new
+                {
+                    type       = "object",
+                    properties = new { query = new { type = "string", description = "What the user wants to know about bins or recycling e.g. 'what goes in grey bin', 'missed collection', 'brown bin subscription cost', 'bulky waste'" } },
+                    required   = new[] { "query" }
+                }
+            }
+        },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "get_school_transport",
+                Description = "Get full Bradford Council school transport / travel assistance information: eligibility rules, distance thresholds, how to apply, application deadlines, SEN/EHCP transport, application forms (5-16 and post-16), contact details and all downloadable policy documents. Call this whenever a user asks about school transport, bus pass, travel to school, eligibility for free transport, or applying for transport assistance.",
+                Parameters  = new
+                {
+                    type       = "object",
+                    properties = new { query = new { type = "string", description = "What the user wants to know about school transport" } },
+                    required   = new[] { "query" }
+                }
+            }
+        },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "get_benefits_info",
+                Description = "Get Bradford Council benefits information scraped live from bradford.gov.uk. CALL THIS for: 'housing benefit', 'council tax reduction', 'council tax support', 'free school meals', 'universal credit', 'crisis fund', 'emergency help', 'food bank', 'hardship', 'discretionary housing payment', 'rent shortfall', 'assisted purchase scheme', 'household items', 'overpayment', 'payment dates', 'missing payment', 'appeal benefit', 'change of circumstances', 'backdating', 'cost of living', 'welfare advice', 'benefit forms', 'landlord benefits', 'myinfo review', 'benefit notification letter'. Do NOT call this for council tax band lookups — use lookup_council_tax_band instead.",
+                Parameters  = new
+                {
+                    type       = "object",
+                    properties = new { query = new { type = "string", description = "What the user wants to know about benefits e.g. 'housing benefit eligibility', 'how to apply for council tax reduction', 'free school meals', 'crisis fund'" } },
+                    required   = new[] { "query" }
+                }
+            }
         }
     };
 
@@ -241,6 +284,7 @@ public partial class CouncilToolService : IToolService
             return toolName switch
             {
                 "lookup_addresses_for_postcode" => await LookupAddressesAsync(args.GetValueOrDefault("postcode", ""), ct),
+                "get_bin_info"                  => await GetBinInfoAsync(args.GetValueOrDefault("query", ""), ct),
                 "get_bin_dates_for_address"     => await GetBinDatesForAddressAsync(args.GetValueOrDefault("postcode", ""), args.GetValueOrDefault("address", ""), ct),
                 "search_bradford_council"       => await SearchCouncilAsync(args.GetValueOrDefault("query", ""), ct),
                 "fetch_council_page"            => IsBradfordUrl(args.GetValueOrDefault("url", ""))
@@ -252,8 +296,10 @@ public partial class CouncilToolService : IToolService
                 "get_library_details"           => await GetLibraryDetailsAsync(args.GetValueOrDefault("library_name", ""), ct),
                 "lookup_council_tax_band"       => await LookupCouncilTaxBandAsync(args.GetValueOrDefault("postcode", ""), args.GetValueOrDefault("address", ""), ct),
                 "find_schools_near_postcode"    => await FindSchoolsNearPostcodeAsync(args.GetValueOrDefault("postcode", ""), args.GetValueOrDefault("phase", ""), ct),
-                "get_school_details"            => await GetSchoolDetailsAsync(args.GetValueOrDefault("school_name", ""), ct),
+                "get_school_details"            => await GetSchoolDetailsAsync(args.GetValueOrDefault("school_name", ""), args.GetValueOrDefault("urn", ""), ct),
                 "get_education_info"            => await GetEducationInfoAsync(args.GetValueOrDefault("topic", "schools"), ct),
+                "get_school_transport"          => await GetSchoolTransportAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_benefits_info"             => await GetBenefitsInfoAsync(args.GetValueOrDefault("query", ""), ct),
                 _                               => $"Unknown tool: {toolName}"
             };
         }
@@ -348,5 +394,7 @@ public partial class CouncilToolService : IToolService
         [JsonPropertyName("admin_district")] public string? AdminDistrict { get; set; }
         [JsonPropertyName("admin_ward")]     public string? AdminWard     { get; set; }
         [JsonPropertyName("parish")]         public string? Parish        { get; set; }
+        [JsonPropertyName("postcode")]       public string? Postcode      { get; set; }
+        public bool IsTerminated { get; set; }
     }
 }

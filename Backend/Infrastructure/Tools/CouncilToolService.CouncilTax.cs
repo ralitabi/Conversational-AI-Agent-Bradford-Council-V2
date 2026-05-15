@@ -9,20 +9,20 @@ namespace Bradford.Infrastructure.Tools;
 
 public partial class CouncilToolService
 {
-    // ── Bradford 2026/27 council tax rates — Band D = £2,360.73 ──
-    // Source: bradford.gov.uk/council-tax/general-council-tax-information/council-tax-bands-and-amounts/
-    // Verified May 2026. Review and update each April when the new financial year begins.
-    // Ratios: A=6, B=7, C=8, D=9, E=11, F=13, G=15, H=18 ninths of Band D.
+    // ── Bradford 2026/27 council tax rates — Band A = £1,555.37 (excl. parish precepts) ──
+    // Source: bradford.gov.uk/council-tax/council-tax-bills/council-tax-bands-and-amounts/
+    // Scraped May 2026. Update each April when new financial year begins.
+    // Ratios: A=6, B=7, C=8, D=9, E=11, F=13, G=15, H=18 ninths of Band D (=£2,333.06).
     private static readonly Dictionary<string, (decimal Annual, decimal Monthly)> BradfordRates2627 = new()
     {
-        ["A"] = (1573.82m, 131.15m),
-        ["B"] = (1836.12m, 153.01m),
-        ["C"] = (2098.43m, 174.87m),
-        ["D"] = (2360.73m, 196.73m),
-        ["E"] = (2885.34m, 240.45m),
-        ["F"] = (3409.94m, 284.16m),
-        ["G"] = (3934.55m, 327.88m),
-        ["H"] = (4721.46m, 393.46m),
+        ["A"] = (1555.37m, 129.61m),
+        ["B"] = (1814.60m, 151.22m),
+        ["C"] = (2073.83m, 172.82m),
+        ["D"] = (2333.06m, 194.42m),
+        ["E"] = (2851.51m, 237.63m),
+        ["F"] = (3369.97m, 280.83m),
+        ["G"] = (3888.43m, 324.04m),
+        ["H"] = (4666.10m, 388.84m),
     };
 
     // Standard band ratios (ninths): A=6, B=7, C=8, D=9, E=11, F=13, G=15, H=18
@@ -31,25 +31,205 @@ public partial class CouncilToolService
         ["A"]=6, ["B"]=7, ["C"]=8, ["D"]=9, ["E"]=11, ["F"]=13, ["G"]=15, ["H"]=18
     };
 
+    // ── Council tax knowledge base ────────────────────────────────────────────
+    private static readonly (string[] Keywords, string[] Urls, string Title, string FollowUp)[] CouncilTaxKnowledgeMap =
+    {
+        // Pay council tax
+        (new[]{"pay","payment","direct debit","paypoint","bank transfer","how to pay","online payment","phone payment","bacs","sort code"},
+         new[]{"https://www.bradford.gov.uk/council-tax/pay-your-council-tax/pay-your-council-tax/",
+               "https://www.bradford.gov.uk/paying-for-services/direct-debit-and-paperless-bills/direct-debit/"},
+         "Pay your Council Tax",
+         "Would you like to know if you qualify for any discounts or reductions on your council tax bill?"),
+
+        // Bands and amounts
+        (new[]{"band","bands","amount","amounts","rate","rates","how much is","what band","council tax rate","1991 valuation","parish precept"},
+         new[]{"https://www.bradford.gov.uk/council-tax/council-tax-bills/council-tax-bands-and-amounts/"},
+         "Council Tax bands and amounts 2026/27",
+         "Would you like me to look up your specific band? Share your Bradford postcode and I can find it for you."),
+
+        // Single person discount
+        (new[]{"single person","live alone","living alone","on my own","one person","sole occupant","25%","single occupancy","one adult"},
+         new[]{"https://www.bradford.gov.uk/council-tax/reduce-your-bill/single-person-discount-for-the-bradford-district/"},
+         "Single Person Discount (25% off)",
+         "Would you like to know about other discounts you might be entitled to?"),
+
+        // Student discount
+        (new[]{"student","university","college","full-time education","student discount","full time student","postgraduate","student exemption"},
+         new[]{"https://www.bradford.gov.uk/council-tax/reduce-your-bill/council-tax-student-discount/"},
+         "Council Tax Student Discount",
+         "If every adult in the property is a full-time student, you pay no council tax at all. Would you like to apply?"),
+
+        // Personal circumstance discounts (disability, carer, SMI, annexe, care leaver, etc.)
+        (new[]{"disability","disabled","carer","caring","severe mental impairment","SMI","annexe","annex","care leaver","apprentice","diplomat","detained","prison","nurse","hostel"},
+         new[]{"https://www.bradford.gov.uk/council-tax/reduce-your-bill/other-council-tax-discounts/"},
+         "Council Tax discounts for personal circumstances",
+         "Would you like to know about property-based discounts or how to challenge your council tax band?"),
+
+        // Property-based discounts / exemptions / empty
+        (new[]{"empty property","unoccupied","second home","holiday home","unfurnished","repossessed","probate","granny flat","annex exempt","property discount","property exempt","disrepair","renovation","uninhabited"},
+         new[]{"https://www.bradford.gov.uk/council-tax/reduce-your-bill/apply-for-a-discount-based-on-the-status-of-your-property/",
+               "https://www.bradford.gov.uk/council-tax/council-tax-bills/empty-properties-and-second-or-holiday-homes/"},
+         "Council Tax discounts based on property status",
+         "Would you like to know about personal circumstance discounts, or how to challenge your council tax band?"),
+
+        // Reduce your bill (general)
+        (new[]{"reduce","reduction","lower my bill","cut my bill","help with council tax","can I reduce","how to reduce","save on council tax"},
+         new[]{"https://www.bradford.gov.uk/council-tax/reduce-your-bill/reduce-your-bill/"},
+         "Ways to reduce your Council Tax bill",
+         "Which type of reduction interests you — personal circumstances, property status, or the means-tested Council Tax Reduction scheme?"),
+
+        // Problems paying / arrears
+        (new[]{"can't pay","cannot pay","behind","arrears","struggling to pay","missed payment","payment difficulty","can't afford","in debt","hardship","money trouble"},
+         new[]{"https://www.bradford.gov.uk/council-tax/problems-paying-your-bill/behind-on-your-council-tax-payments/",
+               "https://www.bradford.gov.uk/council-tax/problems-paying-your-bill/problems-paying-your-bill/"},
+         "Help if you're struggling to pay Council Tax",
+         "Would you like to know about the Council Tax Reduction scheme or access free debt advice?"),
+
+        // Debt advice
+        (new[]{"debt advice","money advice","owe money","money problems","breathing space","citizens advice","debt help","financial support","StepChange"},
+         new[]{"https://www.bradford.gov.uk/council-tax/problems-paying-your-bill/debt-advice-for-council-tax/"},
+         "Council Tax debt advice",
+         "Would you like to know about the Council Tax Collection Commitment and payment arrangement options?"),
+
+        // Enforcement / what happens if you don't pay
+        (new[]{"enforcement","bailiff","court","summons","liability order","attachment of earnings","charging order","bankruptcy","don't pay","not paying","legal action","fine"},
+         new[]{"https://www.bradford.gov.uk/council-tax/problems-paying-your-bill/what-can-happen-if-you-don-t-pay-your-council-tax/"},
+         "What can happen if you don't pay Council Tax",
+         "It's never too late to contact the council before enforcement starts. Would you like debt advice or payment arrangement information?"),
+
+        // Collection commitment / payment plan
+        (new[]{"collection commitment","payment arrangement","instalments","spreading payments","repayment plan","payment schedule"},
+         new[]{"https://www.bradford.gov.uk/council-tax/problems-paying-your-bill/council-tax-collection-commitment/"},
+         "Council Tax Collection Commitment",
+         "Would you like to set up a Direct Debit or speak to the team about a payment arrangement?"),
+
+        // Change of address / circumstances
+        (new[]{"change of address","moved house","new address","moving home","change of circumstances","name change","report a change","council tax refund","tenant moved"},
+         new[]{"https://www.bradford.gov.uk/council-tax/report-a-change-of-address-or-circumstances/report-a-change-or-ask-a-question-about-your-council-tax/"},
+         "Report a change to your Council Tax",
+         "Remember to also notify the benefits team separately if you receive Council Tax Reduction."),
+
+        // Reporting a death
+        (new[]{"death","died","deceased","bereavement","passed away","estate","probate","executor","someone died"},
+         new[]{"https://www.bradford.gov.uk/council-tax/report-a-change-of-address-or-circumstances/council-tax-tell-us-a-resident-or-owner-has-died/"},
+         "Reporting a death for Council Tax",
+         "Would you like to know about property exemptions or discounts available after a bereavement?"),
+
+        // Appeals
+        (new[]{"appeal","dispute","challenge","wrong band","disagree with","valuation tribunal","valuation office","challenge my band","band wrong"},
+         new[]{"https://www.bradford.gov.uk/council-tax/general-council-tax-information/making-a-council-tax-appeal/"},
+         "Making a Council Tax appeal",
+         "Remember: you must keep paying your bill while appealing. Any overpayment will be refunded automatically."),
+
+        // FAQs
+        (new[]{"faq","frequently asked","question about","general query","how does council tax work","confused about"},
+         new[]{"https://www.bradford.gov.uk/council-tax/general-council-tax-information/council-tax-faqs/"},
+         "Council Tax frequently asked questions",
+         "Is there a specific aspect of your council tax you'd like more detail on?"),
+
+        // What is council tax
+        (new[]{"what is council tax","what does council tax fund","what does it pay for","what is it used for","what does it cover"},
+         new[]{"https://www.bradford.gov.uk/council-tax/general-council-tax-information/what-is-council-tax/"},
+         "What is Council Tax?",
+         "Would you like to know about your band, how to pay, or whether you qualify for any reductions?"),
+
+        // Current bill / 2026-27
+        (new[]{"my bill","2026","2027","annual bill","this year","paperless bill","large print","alternative format","braille","extra care"},
+         new[]{"https://www.bradford.gov.uk/council-tax/council-tax-bills/council-tax-bills/",
+               "https://www.bradford.gov.uk/council-tax/pay-your-council-tax/register-for-the-extra-care-scheme/"},
+         "Your Council Tax bill 2026/27",
+         "Would you like to set up Direct Debit or sign up for paperless billing?"),
+
+        // Reduction letter explained
+        (new[]{"reduction letter","council tax reduction letter","what does my letter mean","CTS letter","CTR letter","reduction notice"},
+         new[]{"https://www.bradford.gov.uk/council-tax/general-council-tax-information/council-tax-reduction-letter-explained/"},
+         "Understanding your Council Tax Reduction letter",
+         "If you disagree with the reduction amount, you have the right to appeal. Would you like to know how?"),
+
+        // Landlord
+        (new[]{"landlord","letting","agent","HMO","house in multiple occupation","tenant liability","tenancy change","rental property"},
+         new[]{"https://www.bradford.gov.uk/council-tax/information-for-landlords/information-for-landlords/"},
+         "Council Tax information for landlords",
+         "Would you like to know about empty property charges or how liability transfers between tenancies?"),
+
+        // Contact
+        (new[]{"contact","phone number","email council tax","get in touch","speak to someone","helpline","01274"},
+         new[]{"https://www.bradford.gov.uk/council-tax/contact-the-council-tax-team/contact-the-council-tax-team/"},
+         "Contact the Council Tax team",
+         "You can call the Council Tax team directly on 01274 437792, Monday to Friday."),
+
+        // General fallback
+        (new[]{"council tax"},
+         new[]{"https://www.bradford.gov.uk/council-tax/general-council-tax-information/general-council-tax-information/",
+               "https://www.bradford.gov.uk/council-tax/general-council-tax-information/council-tax-faqs/"},
+         "Bradford Council Tax information",
+         "What would you like to know about your council tax? I can help with payments, bands, discounts, arrears, appeals, and more."),
+    };
+
     private async Task<string> GetCouncilTaxAsync(string query, string address, CancellationToken ct)
     {
-        var urls = new Dictionary<string, string>
+        var q    = query.ToLower();
+        var urls = new List<string>();
+        var title    = "";
+        var followUp = "";
+
+        foreach (var (keywords, pages, pageTitle, pageFollowUp) in CouncilTaxKnowledgeMap)
         {
-            ["pay"]      = "https://www.bradford.gov.uk/council-tax/pay-your-council-tax/",
-            ["band"]     = "https://www.bradford.gov.uk/council-tax/council-tax-bands-and-rates/",
-            ["rate"]     = "https://www.bradford.gov.uk/council-tax/council-tax-bands-and-rates/",
-            ["discount"] = "https://www.bradford.gov.uk/council-tax/council-tax-discounts-and-exemptions/",
-            ["exempt"]   = "https://www.bradford.gov.uk/council-tax/council-tax-discounts-and-exemptions/",
-            ["support"]  = "https://www.bradford.gov.uk/council-tax/council-tax-support/"
-        };
+            if (keywords.Any(k => q.Contains(k, StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (var u in pages)
+                    if (!urls.Contains(u)) urls.Add(u);
+                if (string.IsNullOrEmpty(title))
+                {
+                    title    = pageTitle;
+                    followUp = pageFollowUp;
+                }
+                if (urls.Count >= 2) break;
+            }
+        }
 
-        var url = urls.FirstOrDefault(kv => query.Contains(kv.Key, StringComparison.OrdinalIgnoreCase)).Value
-                  ?? "https://www.bradford.gov.uk/council-tax/";
+        if (urls.Count == 0)
+        {
+            urls.Add("https://www.bradford.gov.uk/council-tax/general-council-tax-information/general-council-tax-information/");
+            title    = "Bradford Council Tax information";
+            followUp = "What would you like to know about your council tax? I can help with payments, bands, discounts, arrears, and more.";
+        }
 
-        var content = await FetchPageAsync(url, ct);
+        var sb = new StringBuilder();
+        sb.AppendLine($"BRADFORD COUNCIL TAX INFORMATION — query: \"{query}\"");
+        sb.AppendLine();
+
+        foreach (var url in urls.Take(2))
+        {
+            var html = await FetchHtmlAsync(url, ct);
+            if (string.IsNullOrEmpty(html)) continue;
+
+            var doc = new HtmlAgilityPack.HtmlDocument();
+            doc.LoadHtml(html);
+            foreach (var tag in new[] { "nav", "header", "footer", "script", "style", "aside", "noscript" })
+            {
+                var nodes = doc.DocumentNode.SelectNodes($"//{tag}");
+                if (nodes != null) foreach (var n in nodes.ToList()) n.Remove();
+            }
+            var main = doc.DocumentNode.SelectSingleNode("//main")
+                    ?? doc.DocumentNode.SelectSingleNode("//article")
+                    ?? doc.DocumentNode.SelectSingleNode("//body");
+            if (main == null) continue;
+
+            var text = CleanText(main.InnerText);
+            sb.AppendLine($"--- SOURCE: {url} ---");
+            sb.AppendLine(TruncateText(text, 3500));
+            sb.AppendLine();
+        }
+
         if (!string.IsNullOrEmpty(address))
-            content += $"\n\nCheck your council tax band: https://www.tax.service.gov.uk/check-if-you-need-to-contact-voa?postcode={Uri.EscapeDataString(address)}";
-        return content;
+            sb.AppendLine($"VOA band checker (GOV.UK): https://www.tax.service.gov.uk/check-council-tax-band/search");
+
+        sb.AppendLine($"OFFICIAL_BRADFORD_LINK: [{title}]({urls[0]})");
+        if (!string.IsNullOrEmpty(followUp))
+            sb.AppendLine($"FOLLOW_UP_SUGGESTION: {followUp}");
+
+        return sb.ToString();
     }
 
     // ── Council tax band lookup — cached 5 min per postcode to avoid repeat GOV.UK scrapes ─
@@ -141,8 +321,8 @@ public partial class CouncilToolService
             AnnualAmount  = selectedRate.Annual > 0 ? $"£{selectedRate.Annual:N2}" : "",
             MonthlyAmount = selectedRate.Monthly > 0 ? $"£{selectedRate.Monthly:N2}" : "",
             AllBands      = allBandsList,
-            PayUrl        = "https://www.bradford.gov.uk/council-tax/pay-your-council-tax/",
-            BandLookupUrl = "https://www.tax.service.gov.uk/check-if-you-need-to-contact-voa"
+            PayUrl        = "https://www.bradford.gov.uk/council-tax/pay-your-council-tax/pay-your-council-tax/",
+            BandLookupUrl = "https://www.tax.service.gov.uk/check-council-tax-band/search"
         };
 
         var sb = new StringBuilder();

@@ -104,6 +104,14 @@ public class SchoolOption
     public string Phone        { get; set; } = string.Empty;
 }
 
+public class TermPeriod
+{
+    public string Label { get; set; } = string.Empty;  // "Christmas Holiday"
+    public string Dates { get; set; } = string.Empty;  // "22 Dec 2025 – 2 Jan 2026"
+    public string Type  { get; set; } = string.Empty;  // "christmas" | "easter" | "halfterm" | "summer" | "term"
+    public bool   Past  { get; set; }
+}
+
 public class SchoolCard
 {
     public string Name          { get; set; } = string.Empty;
@@ -112,11 +120,19 @@ public class SchoolCard
     public string Website       { get; set; } = string.Empty;
     public string Phase         { get; set; } = string.Empty;
     public string Type          { get; set; } = string.Empty;
+    public string Headteacher   { get; set; } = string.Empty;
     public string OfstedRating  { get; set; } = string.Empty;
     public string OfstedDate    { get; set; } = string.Empty;
     public string Pupils        { get; set; } = string.Empty;
     public string AgeRange      { get; set; } = string.Empty;
     public string Urn           { get; set; } = string.Empty;
-    public string AdmissionsUrl { get; set; } = "https://www.bradford.gov.uk/education-and-skills/schools/school-admissions/";
+    public string AdmissionsUrl { get; set; } = "https://www.bradford.gov.uk/education-and-skills/school-admissions/apply-for-a-place-at-one-of-bradford-districts-schools/";
     public string OfstedUrl     { get; set; } = "https://reports.ofsted.gov.uk/";
+    public string TransportUrl  { get; set; } = "https://www.bradford.gov.uk/education-and-skills/travel-assistance/assistance-with-travel-to-home-school-and-college/";
+    public string FreeMealsUrl  { get; set; } = "https://www.bradford.gov.uk/education-and-skills/school-meals/paying-for-school-meals/";
+    public string TermDatesUrl  { get; set; } = "https://www.bradford.gov.uk/education-and-skills/school-holidays-and-term-dates/school-holidays-and-term-dates/";
+    public List<TermPeriod>  TermPeriods { get; set; } = new();
+    public string            AcademicYear { get; set; } = string.Empty;
+    public bool              IsAcademy    { get; set; }
+    public List<string>      Facilities   { get; set; } = new();
 }

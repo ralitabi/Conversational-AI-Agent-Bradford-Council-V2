@@ -36,54 +36,15 @@ public partial class CouncilToolService
     {
         postcode = postcode.Trim().ToUpper();
 
-        // 1. Get user lat/lon and all schools from BSO in parallel
-        var latLonTask  = GetLatLonAsync(postcode, ct);
-        var schoolsTask = ScrapeBradfordSchoolsAsync(postcode, schoolName: null, phase, ct);
-        await Task.WhenAll(latLonTask, schoolsTask);
-
-        var (userLat, userLon) = latLonTask.Result;
-        var schools            = schoolsTask.Result;
+        // 1. Scrape BSO — distances are already included in the BSO response
+        var schools = await ScrapeBradfordSchoolsAsync(postcode, schoolName: null, phase, ct);
 
         if (schools.Count == 0)
             return $"No schools found near {postcode}. " +
                    "Check Bradford's school finder at https://www.bradford.gov.uk/education-and-skills/find-a-school/schools-finder/";
 
-        // 2. Calculate distances — BSO often omits them, so use postcodes.io bulk lookup
-        if (userLat != 0)
-        {
-            // Collect unique school postcodes from address fields
-            var schoolPostcodes = schools
-                .Select(s => ExtractPostcode(s.Address))
-                .Where(p => !string.IsNullOrEmpty(p))
-                .Distinct()
-                .ToList();
-
-            Dictionary<string, (double lat, double lon)> pcMap = new();
-            if (schoolPostcodes.Count > 0)
-                pcMap = await BulkLookupPostcodesAsync(schoolPostcodes!, ct);
-
-            foreach (var s in schools)
-            {
-                var pc = ExtractPostcode(s.Address);
-                if (pc != null && pcMap.TryGetValue(pc, out var ll))
-                {
-                    var mi = HaversineDistanceMi(userLat, userLon, ll.lat, ll.lon);
-                    s.Distance = $"{mi:F1} mi";
-                }
-                else if (string.IsNullOrEmpty(s.Distance))
-                {
-                    s.Distance = "";
-                }
-            }
-        }
-
+        // BSO already provides distance in each row — no postcodes.io lookup needed.
         // 3. Sort by distance and apply phase filter
-        var withCalcDist = schools.Count(s => !string.IsNullOrEmpty(s.Distance));
-        _logger.LogInformation("SchoolDist: {D}/{N} schools have distance after enrichment. Top 3: [{T}]",
-            withCalcDist, schools.Count,
-            string.Join("; ", schools.Where(s => !string.IsNullOrEmpty(s.Distance))
-                                     .OrderBy(s => ParseDistanceValue(s.Distance))
-                                     .Take(3).Select(s => $"{s.Name}={s.Distance}")));
 
         var sorted = schools
             .Where(s => !string.IsNullOrWhiteSpace(s.Name))
@@ -189,50 +150,318 @@ public partial class CouncilToolService
         return m.Success ? Regex.Replace(m.Value, @"\s+", " ").Trim().ToUpper() : null;
     }
 
-    // ── School details (name search) ─────────────────────────────────────────
-    private async Task<string> GetSchoolDetailsAsync(string nameOrUrn, CancellationToken ct)
+    // ── School details (fetch BSO detail page) ───────────────────────────────
+    private async Task<string> GetSchoolDetailsAsync(string schoolName, string urn, CancellationToken ct)
     {
-        var schools = await ScrapeBradfordSchoolsAsync(postcode: null, schoolName: nameOrUrn, phase: null, ct);
+        string detailUrl   = "";
+        string resolvedUrn = urn.Trim();
+        string? detailHtml = null;
 
-        var school = schools.FirstOrDefault(s =>
-                         s.Urn.Equals(nameOrUrn, StringComparison.OrdinalIgnoreCase) ||
-                         s.Name.Equals(nameOrUrn, StringComparison.OrdinalIgnoreCase))
-                  ?? schools.OrderByDescending(s => ScoreAddressMatch(s.Name, nameOrUrn)).FirstOrDefault();
+        if (!string.IsNullOrEmpty(resolvedUrn))
+        {
+            // Path 1: URN known — build URL directly
+            var slug = Regex.Replace(
+                Regex.Replace(schoolName.ToLower(), @"[^a-z0-9]+", "-").Trim('-'),
+                @"-{2,}", "-");
+            detailUrl = $"https://bso.bradford.gov.uk/school-detail/{resolvedUrn}-{slug}";
+        }
+        else
+        {
+            // Path 2: BSO name search — redirects to the detail page when name is unique
+            var (nameHtml, finalUrl) = await SearchBsoByNameAsync(schoolName, ct);
+            if (!string.IsNullOrEmpty(nameHtml) && finalUrl.Contains("/school-detail/"))
+            {
+                detailHtml   = nameHtml;
+                detailUrl    = finalUrl;
+                var urnMatch = Regex.Match(finalUrl, @"/school-detail/(\d+)");
+                resolvedUrn  = urnMatch.Success ? urnMatch.Groups[1].Value : "";
+                _logger.LogInformation("SchoolDetail: name search redirected to {U}", finalUrl);
+            }
+            else
+            {
+                // Path 3: fallback — search multiple postcodes across Bradford for the school
+                foreach (var pc in new[] { "BD7 1DP", "BD1 1HY", "BD18 3EH", "BD2 4BJ", "BD4 0RN" })
+                {
+                    var schools = await ScrapeBradfordSchoolsAsync(pc, null, null, ct);
+                    var match   = schools.FirstOrDefault(s =>
+                                      s.Name.Equals(schoolName, StringComparison.OrdinalIgnoreCase));
+                    if (match != null && !string.IsNullOrEmpty(match.DetailsUrl))
+                    {
+                        detailUrl   = match.DetailsUrl;
+                        resolvedUrn = match.Urn;
+                        break;
+                    }
+                }
+            }
+        }
 
-        if (school == null)
-            return $"Could not find details for '{nameOrUrn}'. " +
-                   "Try searching on https://bso.bradford.gov.uk/council/schools/schoolfinder.aspx";
+        if (string.IsNullOrEmpty(detailUrl))
+            return $"Could not find details for '{schoolName}'. " +
+                   "Try: https://bso.bradford.gov.uk/council/schools/schoolfinder.aspx";
+
+        // Fetch the detail page (reuse if already fetched by name search)
+        var html = detailHtml ?? await FetchHtmlAsync(detailUrl, ct);
+        if (string.IsNullOrEmpty(html))
+            return $"Could not load details for '{schoolName}'. " +
+                   $"Visit: {detailUrl}";
+
+        // Strip scripts/styles and collapse whitespace
+        html = Regex.Replace(html, @"<script[^>]*>.*?</script>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+        html = Regex.Replace(html, @"<style[^>]*>.*?</style>",   "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+        var text = Regex.Replace(html, @"<[^>]+>", " ");
+        text = Regex.Replace(text, @"\s{2,}", " ").Trim();
+
+        // Parse structured fields with regex
+        string ParseField(string label, string stopAt = @"(?:Phase|Control|Headteacher|Address|Chair|Tel|Fax|Website|Estab|Ofsted|Map|School|Department|Opening|Start|Finish)")
+        {
+            var m = Regex.Match(text, $@"{label}\s*:?\s*([^\n]+?)(?:\s+{stopAt}|\s*$)", RegexOptions.IgnoreCase);
+            return m.Success ? m.Groups[1].Value.Trim() : "";
+        }
+
+        var name        = ParseField("(Primary|Secondary|Nursery|Special|Academy|College) School Name",
+                                     @"Phase") is { Length: > 0 } n ? n : schoolName;
+        var phase       = ParseField("Phase");
+        var control     = ParseField("Control");   // Academy / Community / Foundation / Voluntary Aided
+        var headteacher = Regex.Match(text, @"Headteacher\s*:?\s*([^:]+?)(?:\s+Chair|\s+Address)", RegexOptions.IgnoreCase) is { Success: true } hm
+                          ? hm.Groups[1].Value.Trim() : "";
+        var address     = Regex.Match(text, @"Address\s+(.*?BD\d{1,2}\s*\d[A-Z]{2})", RegexOptions.IgnoreCase | RegexOptions.Singleline) is { Success: true } am
+                          ? Regex.Replace(am.Groups[1].Value.Trim(), @"\s+", " ") : "";
+        var tel         = ParseField("Tel",     @"(?:Fax|Website|Estab|Map)");
+        var website     = ParseField("Website", @"(?:Estab|Map|School|Department)");
+        var estab       = Regex.Match(text, @"Estab\s*no\s*:?\s*(\d+)", RegexOptions.IgnoreCase) is { Success: true } em
+                          ? em.Groups[1].Value : "";
+
+        // Normalise website URL
+        if (!string.IsNullOrEmpty(website) && !website.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            website = "https://" + website.TrimStart('/');
+
+        // Determine school type from Control field
+        var schoolType = control switch
+        {
+            var c when c.Contains("Academy",    StringComparison.OrdinalIgnoreCase) => "Academy",
+            var c when c.Contains("Community",  StringComparison.OrdinalIgnoreCase) => "Community School",
+            var c when c.Contains("Foundation", StringComparison.OrdinalIgnoreCase) => "Foundation School",
+            var c when c.Contains("Voluntary",  StringComparison.OrdinalIgnoreCase) => "Voluntary Aided",
+            var c when c.Contains("Free",       StringComparison.OrdinalIgnoreCase) => "Free School",
+            var c when string.IsNullOrEmpty(c)                                       => "",
+            _                                                                        => control
+        };
+
+        var isAcademy  = schoolType.Contains("Academy", StringComparison.OrdinalIgnoreCase) ||
+                         schoolType.Contains("Free",    StringComparison.OrdinalIgnoreCase);
+        var termPeriods = BuildBradfordTermDates();
+
+        // Fetch Ofsted rating and enrich school data
+        var schoolTermUrl  = string.Empty;
+        var facilities     = new List<string>();
+        var ofstedRating   = string.Empty;
+        var ofstedUrn      = resolvedUrn;
+        var ageRange       = InferAgeRange(phase, string.IsNullOrEmpty(name) ? schoolName : name);
+
+        if (!string.IsNullOrEmpty(website))
+        {
+            var (termUrl2, facs) = await FetchSchoolWebsiteDataAsync(website, ct);
+            schoolTermUrl = termUrl2;
+            facilities    = facs;
+        }
+
+        // Try to fetch Ofsted rating from reports.ofsted.gov.uk search
+        var (fetchedRating, fetchedOfstedUrn) = await FetchOfstedRatingAsync(
+            string.IsNullOrEmpty(name) ? schoolName : name, ct);
+        if (!string.IsNullOrEmpty(fetchedRating))   ofstedRating  = fetchedRating;
+        if (!string.IsNullOrEmpty(fetchedOfstedUrn)) ofstedUrn     = fetchedOfstedUrn;
+
+        var resolvedOfstedUrl = string.IsNullOrEmpty(ofstedUrn)
+            ? "https://reports.ofsted.gov.uk/"
+            : $"https://reports.ofsted.gov.uk/provider/21/{ofstedUrn}";
 
         var card = new SchoolCard
         {
-            Name          = school.Name,
-            Address       = school.Address,
-            Phone         = school.Phone,
-            Website       = school.Website,
-            Phase         = school.Phase,
-            Type          = school.Type,
-            OfstedRating  = school.OfstedRating,
-            OfstedDate    = school.OfstedDate,
-            Pupils        = school.Pupils,
-            AgeRange      = school.AgeRange,
-            Urn           = school.Urn,
-            AdmissionsUrl = "https://www.bradford.gov.uk/education-and-skills/schools/school-admissions/",
-            OfstedUrl     = string.IsNullOrEmpty(school.Urn)
-                ? "https://reports.ofsted.gov.uk/"
-                : $"https://reports.ofsted.gov.uk/provider/21/{school.Urn}"
+            Name          = string.IsNullOrEmpty(name) ? schoolName : name,
+            Address       = address,
+            Phone         = tel,
+            Website       = website,
+            Phase         = phase,
+            Type          = schoolType,
+            Headteacher   = headteacher,
+            OfstedRating  = ofstedRating,
+            OfstedDate    = "",
+            Pupils        = "",
+            AgeRange      = ageRange,
+            Urn           = resolvedUrn,
+            AdmissionsUrl = "https://www.bradford.gov.uk/education-and-skills/school-admissions/apply-for-a-place-at-one-of-bradford-districts-schools/",
+            OfstedUrl     = resolvedOfstedUrl,
+            TransportUrl  = "https://www.bradford.gov.uk/education-and-skills/travel-assistance/assistance-with-travel-to-home-school-and-college/",
+            FreeMealsUrl  = "https://www.bradford.gov.uk/education-and-skills/school-meals/paying-for-school-meals/",
+            TermDatesUrl  = !string.IsNullOrEmpty(schoolTermUrl) ? schoolTermUrl
+                            : "https://www.bradford.gov.uk/education-and-skills/school-holidays-and-term-dates/school-holidays-and-term-dates/",
+            TermPeriods   = termPeriods,
+            AcademicYear  = "2025/26 & 2026/27",
+            IsAcademy     = isAcademy,
+            Facilities    = facilities
         };
+
+        _logger.LogInformation("SchoolDetail: {N} | head={H} | facs={F} | periods={P}",
+            card.Name, card.Headteacher, string.Join(",", facilities.Take(3)), card.TermPeriods.Count);
 
         var sb = new StringBuilder();
         sb.AppendLine("[[SCHOOL_CARD]]");
         sb.AppendLine(JsonSerializer.Serialize(card));
         sb.AppendLine("[[/SCHOOL_CARD]]");
         sb.AppendLine();
-        sb.AppendLine($"SCHOOL_DETAIL_INSTRUCTION: Details for {school.Name}. " +
-                      $"Phase: {school.Phase}. Type: {school.Type}. Ofsted: {school.OfstedRating}. " +
-                      $"Pupils: {school.Pupils}. Age: {school.AgeRange}. " +
-                      "Admissions: Bradford Council manages community school places; academies handle their own. " +
-                      "Comparison tip: Outstanding > Good > Requires Improvement. Always recommend a school visit.");
+        sb.AppendLine("SCHOOL_DETAIL_INSTRUCTION — critical rules:");
+        sb.AppendLine("The card already shows: school name, phase, type, Ofsted rating, age range, address, headteacher, phone, website.");
+        sb.AppendLine("NEVER mention any of those facts in your text — they are already visible.");
+        sb.AppendLine();
+        sb.AppendLine("Write exactly 4 short paragraphs. Use ## headings so each becomes a separate chat bubble. Keep each to 1-2 sentences:");
+        sb.AppendLine();
+        sb.AppendLine($"## About {card.Name}");
+        sb.AppendLine("One warm sentence about the school's ethos or character — what makes it distinctive. Do NOT mention rating, age range, address, or headteacher.");
+        if (facilities.Count > 0)
+        {
+            // Strip emoji characters before including in text instruction
+            var facLabels = facilities.Take(2)
+                .Select(f => System.Text.RegularExpressions.Regex.Replace(f, @"\p{Cs}|\p{So}|\p{Sm}", "").Trim());
+            sb.AppendLine($"You may mention: {string.Join(", ", facLabels)}.");
+        }
+        sb.AppendLine();
+        sb.AppendLine("## How to Apply");
+        sb.AppendLine("Bradford uses a central admissions system — applications open every September for the following September entry, with a **closing date in January**. Tap 'Apply for a school place' in the card.");
+        sb.AppendLine();
+        sb.AppendLine("## Support for Families");
+        sb.AppendLine("Mention **free school meals** eligibility (button in the card), **school transport** if over the qualifying distance, and **SEND support** from the school and Bradford Council.");
+        sb.AppendLine();
+        sb.AppendLine("## Term Dates");
+        sb.AppendLine("Say exactly: 'Would you like to see the **term dates and holiday schedule** for this school? Just say **yes** and I'll show you the full calendar.'");
         return sb.ToString();
+    }
+
+    // ── BSO name search → returns (detailHtml, detailUrl).
+    //    Single match  → BSO redirects to /school-detail/{urn}-{slug} directly.
+    //    Multiple match → BSO goes to schoolsearchresults.aspx; we pick the best
+    //                     <td class="schoolName"> link and follow it.
+    private async Task<(string html, string finalUrl)> SearchBsoByNameAsync(string name, CancellationToken ct)
+    {
+        try
+        {
+            using var handler = new System.Net.Http.HttpClientHandler
+            {
+                UseCookies = true, AllowAutoRedirect = true, MaxAutomaticRedirections = 5
+            };
+            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) };
+            client.DefaultRequestHeaders.Add("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            client.DefaultRequestHeaders.Add("Accept", "text/html,*/*");
+
+            var getHtml = await (await client.GetAsync(SchoolFinderBase, ct)).Content.ReadAsStringAsync(ct);
+            var getDoc  = new HtmlDocument();
+            getDoc.LoadHtml(getHtml);
+
+            var fields = ExtractHiddenFields(getDoc);
+            fields["ctl00$ContentPlaceHolder1$tbxSchoolName"] = name;
+            fields["ctl00$ContentPlaceHolder1$tbxPostcode"]   = "";
+            fields["ctl00$ContentPlaceHolder1$btnSearch"]     = "Search";
+            client.DefaultRequestHeaders.Add("Referer", SchoolFinderBase);
+
+            var postResp = await client.PostAsync(SchoolFinderBase,
+                new FormUrlEncodedContent(fields.Select(kv =>
+                    new KeyValuePair<string, string>(kv.Key, kv.Value))), ct);
+            var html     = await postResp.Content.ReadAsStringAsync(ct);
+            var finalUrl = postResp.RequestMessage?.RequestUri?.ToString() ?? "";
+
+            // Single match: BSO redirected directly to the detail page
+            if (finalUrl.Contains("/school-detail/"))
+                return (html, finalUrl);
+
+            // Multiple matches: schoolsearchresults.aspx — find best link
+            if (finalUrl.Contains("schoolsearchresults"))
+            {
+                var resultsDoc = new HtmlDocument();
+                resultsDoc.LoadHtml(html);
+
+                // Links are in <td class="schoolName"><a href="/school-detail/...">Name</a></td>
+                var links = resultsDoc.DocumentNode.SelectNodes("//td[contains(@class,'schoolName')]//a");
+                if (links != null && links.Count > 0)
+                {
+                    var best = links.FirstOrDefault(a =>
+                                   CleanText(a.InnerText).Equals(name, StringComparison.OrdinalIgnoreCase))
+                            ?? links.OrderByDescending(a =>
+                                   ScoreAddressMatch(CleanText(a.InnerText), name)).First();
+
+                    var href = best.GetAttributeValue("href", "").Trim();
+                    if (!string.IsNullOrEmpty(href))
+                    {
+                        var detailUrl = href.StartsWith("http")
+                            ? href
+                            : "https://bso.bradford.gov.uk" + (href.StartsWith("/") ? href : "/" + href);
+                        var detailResp    = await client.GetAsync(detailUrl, ct);
+                        var detailHtml    = await detailResp.Content.ReadAsStringAsync(ct);
+                        var detailFinalUrl = detailResp.RequestMessage?.RequestUri?.ToString() ?? detailUrl;
+                        _logger.LogInformation("SchoolDetail: multi-result → {U}", detailFinalUrl);
+                        return (detailHtml, detailFinalUrl);
+                    }
+                }
+            }
+
+            // No results with full name — try progressively shorter terms (avoids recursion)
+            var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            foreach (int take in new[] { 2, 1 })
+            {
+                if (words.Length <= take) continue;
+                var shortName = string.Join(" ", words.Take(take));
+                _logger.LogInformation("SchoolDetail: retrying with first {T} words: '{S}'", take, shortName);
+                var shortFields = new Dictionary<string, string>(fields)
+                {
+                    ["ctl00$ContentPlaceHolder1$tbxSchoolName"] = shortName
+                };
+                var shortContent = new FormUrlEncodedContent(shortFields.Select(kv =>
+                    new KeyValuePair<string, string>(kv.Key, kv.Value)));
+                var shortResp    = await client.PostAsync(SchoolFinderBase, shortContent, ct);
+                var shortHtml    = await shortResp.Content.ReadAsStringAsync(ct);
+                var shortUrl     = shortResp.RequestMessage?.RequestUri?.ToString() ?? "";
+
+                if (shortUrl.Contains("/school-detail/"))
+                    return (shortHtml, shortUrl);
+
+                if (shortUrl.Contains("schoolsearchresults"))
+                {
+                    var sDoc = new HtmlDocument(); sDoc.LoadHtml(shortHtml);
+                    var sLinks = sDoc.DocumentNode.SelectNodes("//td[contains(@class,'schoolName')]//a");
+                    if (sLinks != null && sLinks.Count > 0 && sLinks.Count <= 8)
+                    {
+                        // Only pick if exact name match or high-confidence score (>= 2)
+                        var sBest = sLinks.FirstOrDefault(a =>
+                                        CleanText(a.InnerText).Equals(name, StringComparison.OrdinalIgnoreCase));
+                        if (sBest == null)
+                        {
+                            var scored = sLinks
+                                .Select(a => (node: a, score: ScoreAddressMatch(CleanText(a.InnerText), name)))
+                                .OrderByDescending(x => x.score).First();
+                            if (scored.score >= 2) sBest = scored.node;
+                        }
+                        if (sBest != null)
+                        {
+                            var sHref = sBest.GetAttributeValue("href", "").Trim();
+                            if (!string.IsNullOrEmpty(sHref))
+                            {
+                                var dUrl  = sHref.StartsWith("http") ? sHref
+                                            : "https://bso.bradford.gov.uk" + (sHref.StartsWith("/") ? sHref : "/" + sHref);
+                                var dResp = await client.GetAsync(dUrl, ct);
+                                var dHtml = await dResp.Content.ReadAsStringAsync(ct);
+                                return (dHtml, dResp.RequestMessage?.RequestUri?.ToString() ?? dUrl);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return ("", "");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("SearchBsoByName failed for '{N}': {M}", name, ex.Message);
+            return ("", "");
+        }
     }
 
     // ── Bradford school finder scraper ────────────────────────────────────────
@@ -335,202 +564,92 @@ public partial class CouncilToolService
     }
 
     // ── Parse Bradford BSO school finder results HTML ────────────────────────
-    // The BSO site is ASP.NET GridView — school name is ALWAYS the linked cell.
-    // Column order varies, so we detect by content not position.
+    // BSO structure (confirmed):
+    //   <tr><th>Schools in your search area</th><th>Distance (miles)</th></tr>  ← header
+    //   <tr><th>Primary School</th></tr>                                         ← phase group
+    //   <tr><th class="schoolName"><a href="/school-detail/URN-slug">Name</a></th>
+    //       <td class="schoolDistance">0.37</td></tr>                            ← school row
     private List<SchoolData> ParseSchoolResults(string html, string? postcode)
     {
         var doc = new HtmlDocument();
         doc.LoadHtml(html);
-
         var schools = new List<SchoolData>();
 
-        // ── Strategy 1: GridView table ──────────────────────────────────────
-        var tables = doc.DocumentNode.SelectNodes("//table");
-        if (tables != null)
+        var rows = doc.DocumentNode.SelectNodes("//tr");
+        if (rows == null) return schools;
+
+        string currentPhase = "";
+
+        foreach (var row in rows)
         {
-            foreach (var table in tables)
+            var th = row.SelectSingleNode("th");
+            var td = row.SelectSingleNode("td");
+
+            // Phase group header: row has only <th>, no <td>
+            if (th != null && td == null)
             {
-                var rows = table.SelectNodes(".//tr");
-                if (rows == null || rows.Count < 2) continue;
-
-                // Read header row (may use <th> or first <td> row)
-                var headerCells = rows[0].SelectNodes(".//th | .//td");
-                if (headerCells == null) continue;
-                var headers = headerCells.Select(h => CleanText(h.InnerText).ToLower()).ToList();
-
-                // Log headers so we can see what BSO returns
-                _logger.LogInformation("BSO table headers: [{H}]", string.Join(" | ", headers));
-
-                // Must look like a school table
-                if (!headers.Any(h => h.Contains("school") || h.Contains("name") ||
-                                      h.Contains("estab") || h.Contains("distance")))
-                    continue;
-
-                // Pre-map header indices (best-effort)
-                int hName   = headers.FindIndex(h => h.Contains("school") || h.Contains("name") || h.Contains("estab"));
-                int hAddr   = headers.FindIndex(h => h.Contains("address") || h.Contains("postcode") || h.Contains("town"));
-                int hType   = headers.FindIndex(h => h.Contains("type") || h.Contains("category"));
-                int hPhase  = headers.FindIndex(h => h.Contains("phase") || h.Contains("primary") || h.Contains("secondary"));
-                int hOfsted = headers.FindIndex(h => h.Contains("ofsted") || h.Contains("inspection") || h.Contains("rating"));
-                int hDist   = headers.FindIndex(h => h.Contains("distance") || h.Contains("dist") || h.Contains("mile"));
-                int hAge    = headers.FindIndex(h => h.Contains("age") || h.Contains("range"));
-
-                for (int r = 1; r < rows.Count; r++)
-                {
-                    var cells = rows[r].SelectNodes(".//td");
-                    if (cells == null || cells.Count < 2) continue;
-
-                    // Log first data row so we can see actual cell values
-                    if (r == 1)
-                        _logger.LogInformation("BSO row1 cells: [{C}]",
-                            string.Join(" | ", cells.Select(c => $"'{CellText(c)}'").Take(8)));
-
-                    var school = new SchoolData();
-
-                    // PRIMARY RULE: the cell containing an <a> tag IS the school name
-                    int linkCellIdx = -1;
-                    for (int c = 0; c < cells.Count; c++)
-                    {
-                        var a = cells[c].SelectSingleNode(".//a");
-                        if (a != null)
-                        {
-                            school.Name = CleanText(a.InnerText);
-                            var href = a.GetAttributeValue("href", "");
-                            if (!string.IsNullOrEmpty(href))
-                                school.DetailsUrl = href.StartsWith("http")
-                                    ? href
-                                    : $"https://bso.bradford.gov.uk/council/schools/{href.TrimStart('/')}";
-                            linkCellIdx = c;
-                            break;
-                        }
-                    }
-                    // Fallback: use header-mapped name column
-                    if (string.IsNullOrEmpty(school.Name) && hName >= 0 && hName < cells.Count)
-                        school.Name = CleanText(cells[hName].InnerText);
-                    if (string.IsNullOrEmpty(school.Name)) continue;
-
-                    // Fill other fields from header-mapped columns first
-                    if (hAddr   >= 0 && hAddr   < cells.Count) school.Address      = CellText(cells[hAddr]);
-                    if (hType   >= 0 && hType   < cells.Count) school.Type         = CellText(cells[hType]);
-                    if (hPhase  >= 0 && hPhase  < cells.Count) school.Phase        = CellText(cells[hPhase]);
-                    if (hOfsted >= 0 && hOfsted < cells.Count) school.OfstedRating = NormaliseOfstedLabel(CellText(cells[hOfsted]));
-                    if (hAge    >= 0 && hAge    < cells.Count) school.AgeRange     = CellText(cells[hAge]);
-                    if (hDist   >= 0 && hDist   < cells.Count) school.Distance     = FormatDistance(CellText(cells[hDist]));
-
-                    // Content-scan remaining cells for any fields still missing.
-                    // Use raw InnerText (not CleanText) to avoid the Length>2 filter
-                    // that would strip short distance values like "1" or "2".
-                    for (int c = 0; c < cells.Count; c++)
-                    {
-                        if (c == linkCellIdx) continue;
-                        var t = CellText(cells[c]);
-                        if (string.IsNullOrEmpty(t)) continue;
-
-                        // Distance: use double.TryParse — handles "0.39", "2.5", "0.3875", "1 miles"
-                        if (string.IsNullOrEmpty(school.Distance))
-                        {
-                            var raw = Regex.Replace(t, @"\s*miles?", "", RegexOptions.IgnoreCase).Trim();
-                            if (double.TryParse(raw, System.Globalization.NumberStyles.Float,
-                                                System.Globalization.CultureInfo.InvariantCulture,
-                                                out var distVal)
-                                && distVal >= 0 && distVal < 50)  // valid distance range
-                            {
-                                school.Distance = $"{distVal:F1} mi";
-                                continue;
-                            }
-                        }
-                        // Address: contains Bradford postcode
-                        if (string.IsNullOrEmpty(school.Address) &&
-                            Regex.IsMatch(t, @"BD\d{1,2}\s*\d[A-Z]{2}", RegexOptions.IgnoreCase))
-                        {
-                            school.Address = t;
-                            continue;
-                        }
-                        // Ofsted: short text matching known ratings
-                        if (string.IsNullOrEmpty(school.OfstedRating) && t.Length < 40)
-                        {
-                            var norm = NormaliseOfstedLabel(t);
-                            if (!string.IsNullOrEmpty(norm)) { school.OfstedRating = norm; continue; }
-                        }
-                        // Type: long-ish label, doesn't look like a number or address
-                        if (string.IsNullOrEmpty(school.Type) && t.Length is > 4 and < 60 &&
-                            !Regex.IsMatch(t, @"^\d") &&
-                            (t.Contains("Academy") || t.Contains("Community") || t.Contains("School") ||
-                             t.Contains("Foundation") || t.Contains("Voluntary") || t.Contains("Free")))
-                        {
-                            school.Type = t;
-                        }
-                        // Phase
-                        if (string.IsNullOrEmpty(school.Phase))
-                        {
-                            var p = InferPhaseFromLabel(t);
-                            if (!string.IsNullOrEmpty(p)) school.Phase = p;
-                        }
-                        // Age range
-                        if (string.IsNullOrEmpty(school.AgeRange) &&
-                            Regex.IsMatch(t, @"\d+\s*[-–]\s*\d+"))
-                            school.AgeRange = t;
-                    }
-
-                    // Final fallback phase from name
-                    if (string.IsNullOrEmpty(school.Phase))
-                        school.Phase = InferPhase(school.Name);
-
-                    if (school.Name.Length > 3)
-                        schools.Add(school);
-                }
-
-                if (schools.Count > 0) break;
+                var label = CleanText(th.InnerText);
+                var inferred = InferPhaseFromLabel(label);
+                if (!string.IsNullOrEmpty(inferred))
+                    currentPhase = inferred;
+                continue;
             }
-        }
 
-        // ── Strategy 2: div/class patterns ─────────────────────────────────
-        if (schools.Count == 0)
-        {
-            var items = doc.DocumentNode.SelectNodes(
-                "//*[contains(@class,'school') or contains(@class,'result') or contains(@id,'school')]");
-            if (items != null)
-                foreach (var item in items)
+            // School data row: <th> (name) + <td> (distance)
+            if (th == null || td == null) continue;
+
+            var school = new SchoolData();
+
+            // Name — from <a> inside <th>
+            var link = th.SelectSingleNode(".//a");
+            if (link != null)
+            {
+                school.Name = CleanText(link.InnerText);
+                var href = link.GetAttributeValue("href", "").Trim();
+                if (!string.IsNullOrEmpty(href))
                 {
-                    var link = item.SelectSingleNode(".//a");
-                    var name = link != null ? CleanText(link.InnerText) : ExtractFirstHeading(item);
-                    if (string.IsNullOrEmpty(name) || name.Length < 5) continue;
-                    var text = CleanText(item.InnerText);
-                    schools.Add(new SchoolData
-                    {
-                        Name       = name,
-                        Address    = ExtractAddress(text),
-                        Phase      = InferPhase(name),
-                        DetailsUrl = link?.GetAttributeValue("href", "") ?? ""
-                    });
+                    school.DetailsUrl = href.StartsWith("http")
+                        ? href
+                        : "https://bso.bradford.gov.uk" + (href.StartsWith("/") ? href : "/" + href);
+
+                    // URN is the number before the first dash in the slug
+                    // e.g. /school-detail/50082-copthorne-primary-school → URN=50082
+                    var urnMatch = Regex.Match(href, @"/school-detail/(\d+)");
+                    if (urnMatch.Success)
+                        school.Urn = urnMatch.Groups[1].Value;
                 }
+            }
+            else
+            {
+                school.Name = CleanText(th.InnerText);
+            }
+
+            if (string.IsNullOrEmpty(school.Name) || school.Name.Length < 3) continue;
+
+            // Distance — BSO provides it directly in <td>
+            var distRaw = CellText(td)
+                .Replace("miles", "", StringComparison.OrdinalIgnoreCase)
+                .Replace("mile",  "", StringComparison.OrdinalIgnoreCase)
+                .Trim();
+            if (double.TryParse(distRaw,
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var distVal) && distVal >= 0 && distVal < 100)
+                school.Distance = $"{distVal:F2} mi";
+
+            // Phase — from current group header, or infer from name
+            school.Phase = !string.IsNullOrEmpty(currentPhase)
+                ? currentPhase
+                : InferPhase(school.Name);
+
+            schools.Add(school);
         }
 
-        // ── Strategy 3: any link with school/academy in text ───────────────
-        if (schools.Count == 0)
-        {
-            var allLinks = doc.DocumentNode.SelectNodes("//a");
-            if (allLinks != null)
-                foreach (var link in allLinks)
-                {
-                    var name = CleanText(link.InnerText);
-                    if (name.Length < 5 || name.Length > 80) continue;
-                    var nl = name.ToLower();
-                    if (!nl.Contains("school") && !nl.Contains("academy") &&
-                        !nl.Contains("college") && !nl.Contains("nursery")) continue;
-                    var href = link.GetAttributeValue("href", "");
-                    schools.Add(new SchoolData
-                    {
-                        Name       = name,
-                        Phase      = InferPhase(name),
-                        DetailsUrl = href.StartsWith("http") ? href
-                            : string.IsNullOrEmpty(href) ? ""
-                            : $"https://bso.bradford.gov.uk/council/schools/{href.TrimStart('/')}"
-                    });
-                }
-        }
+        _logger.LogInformation("BSO parse: {N} schools, {D} with distance. Top 3: [{T}]",
+            schools.Count,
+            schools.Count(s => !string.IsNullOrEmpty(s.Distance)),
+            string.Join("; ", schools.Take(3).Select(s => $"{s.Name}={s.Distance}")));
 
-        // Sort by distance (closest first), remove duplicates, no arbitrary cap
         return schools
             .Where(s => !string.IsNullOrEmpty(s.Name))
             .DistinctBy(s => s.Name)
@@ -572,35 +691,163 @@ public partial class CouncilToolService
         _                                  => ""
     };
 
+    // ── School transport / travel assistance ─────────────────────────────────
+    private const string TransportUrl = "https://www.bradford.gov.uk/education-and-skills/travel-assistance/assistance-with-travel-to-home-school-and-college/";
+
+    private async Task<string> GetSchoolTransportAsync(string query, CancellationToken ct)
+    {
+        var html = await FetchHtmlAsync(TransportUrl, ct);
+        if (string.IsNullOrEmpty(html))
+            return TransportFallback();
+
+        var doc = new HtmlDocument();
+        doc.LoadHtml(html);
+
+        // Remove nav / header / footer / scripts
+        foreach (var tag in new[] { "nav", "header", "footer", "script", "style", "aside", "noscript" })
+        {
+            var nodes = doc.DocumentNode.SelectNodes($"//{tag}");
+            if (nodes != null) foreach (var n in nodes.ToList()) n.Remove();
+        }
+
+        // ── Extract document links ────────────────────────────────────────────
+        var docLinks = doc.DocumentNode.SelectNodes("//a[@href]")
+            ?.Where(a =>
+            {
+                var href = a.GetAttributeValue("href", "").ToLower();
+                return href.Contains(".pdf") || href.Contains(".doc") || href.Contains(".docx");
+            })
+            .Select(a =>
+            {
+                var href = a.GetAttributeValue("href", "").Trim();
+                var text = CleanText(a.InnerText);
+                var full = href.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                    ? href : "https://www.bradford.gov.uk" + href;
+                return (text, full);
+            })
+            .Where(d => !string.IsNullOrWhiteSpace(d.text))
+            .DistinctBy(d => d.full)
+            .ToList() ?? new();
+
+        // ── Full page text ────────────────────────────────────────────────────
+        var main = doc.DocumentNode.SelectSingleNode("//main")
+                ?? doc.DocumentNode.SelectSingleNode("//article")
+                ?? doc.DocumentNode.SelectSingleNode("//body");
+        var pageText = main == null ? "" : CleanText(main.InnerText);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("BRADFORD COUNCIL — SCHOOL TRANSPORT & TRAVEL ASSISTANCE");
+        sb.AppendLine($"Source: {TransportUrl}");
+        sb.AppendLine();
+        sb.AppendLine(TruncateText(pageText, 3800));
+        sb.AppendLine();
+
+        if (docLinks.Count > 0)
+        {
+            sb.AppendLine("DOWNLOADABLE FORMS & POLICY DOCUMENTS:");
+            foreach (var (text, url) in docLinks)
+                sb.AppendLine($"- {text}: {url}");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("CONTACT — Travel Assistance Service:");
+        sb.AppendLine("  Phone: 01274 439450");
+        sb.AppendLine("  Email: schooltransport@bradford.gov.uk");
+        sb.AppendLine($"  Apply online: {TransportUrl}");
+        sb.AppendLine();
+        sb.AppendLine($"OFFICIAL_BRADFORD_LINK: [School transport and travel assistance]({TransportUrl})");
+        sb.AppendLine("FOLLOW_UP_SUGGESTION: Would you like help finding schools near your postcode, or information about school admissions?");
+
+        return sb.ToString();
+    }
+
+    private static string TransportFallback() =>
+        $"""
+        BRADFORD SCHOOL TRANSPORT — KEY FACTS (source: {TransportUrl})
+
+        WHO QUALIFIES:
+        - Children aged 5–16 at their nearest qualifying school who live at least:
+          • 2 miles away (age 5–7)
+          • 3 miles away (age 8–16)
+        - Children with SEN/EHCP attending their nearest suitable school
+        - Routes officially deemed unsafe to walk
+
+        APPLY BY: Friday 12 June 2026 for September 2026 start
+
+        APPLICATION FORMS:
+        - Ages 5–16: https://www.bradford.gov.uk/media/keth5ppv/application-for-travel-compulsory-school-age-5-16.docx
+        - Post-16:   https://www.bradford.gov.uk/media/gwmjutma/application-for-travel-post-16.docx
+
+        POLICY DOCUMENTS:
+        - Home to school travel policy: https://www.bradford.gov.uk/media/zgzbvrrx/home-to-school-travel-and-transport-policy-for-children-of-compulsory-school-age.pdf
+        - Unavailable walking routes:   https://www.bradford.gov.uk/media/2393/unvailable-walking-routes.pdf
+
+        CONTACT:
+        - Phone: 01274 439450
+        - Email: schooltransport@bradford.gov.uk
+        - Full details: {TransportUrl}
+        """;
+
     // ── Education info scraper ────────────────────────────────────────────────
     private async Task<string> GetEducationInfoAsync(string topic, CancellationToken ct)
     {
-        var urls = new List<string>
-        {
-            "https://www.bradford.gov.uk/education-and-skills/education-and-skills/",
-            "https://www.bradford.gov.uk/education-and-skills/schools/school-admissions/",
-        };
-
         var t = topic.ToLower();
-        if (t.Contains("send") || t.Contains("special") || t.Contains("disability") || t.Contains("need"))
-            urls.Add("https://www.bradford.gov.uk/education-and-skills/special-educational-needs-and-disability-send/");
-        if (t.Contains("meal") || t.Contains("free school"))
-            urls.Add("https://www.bradford.gov.uk/education-and-skills/free-school-meals/");
-        if (t.Contains("start") || t.Contains("age") || t.Contains("reception") || t.Contains("when"))
-            urls.Add("https://www.bradford.gov.uk/education-and-skills/schools/starting-school/");
-        if (t.Contains("term") || t.Contains("holiday") || t.Contains("dates"))
-            urls.Add("https://www.bradford.gov.uk/education-and-skills/schools/term-dates/");
-        if (t.Contains("uniform"))
-            urls.Add("https://www.bradford.gov.uk/education-and-skills/schools/school-uniforms/");
+        var urls = new List<string>();
+
+        if (t.Contains("admiss") || t.Contains("apply") || t.Contains("place") || t.Contains("start") || t.Contains("reception"))
+        {
+            urls.Add("https://www.bradford.gov.uk/education-and-skills/school-admissions/apply-for-a-place-at-one-of-bradford-districts-schools/");
+            urls.Add("https://www.bradford.gov.uk/education-and-skills/school-admissions/about-school-admissions/");
+        }
+        if (t.Contains("term") || t.Contains("holiday") || t.Contains("dates") || t.Contains("closure"))
+        {
+            urls.Add("https://www.bradford.gov.uk/education-and-skills/school-holidays-and-term-dates/school-holidays-and-term-dates/");
+            urls.Add("https://www.bradford.gov.uk/education-and-skills/school-holidays-and-term-dates/school-closures/");
+        }
+        if (t.Contains("meal") || t.Contains("free school") || t.Contains("lunch") || t.Contains("fsm"))
+        {
+            urls.Add("https://www.bradford.gov.uk/education-and-skills/school-meals/paying-for-school-meals/");
+            urls.Add("https://www.bradford.gov.uk/education-and-skills/school-meals/school-meals/");
+        }
+        if (t.Contains("send") || t.Contains("special") || t.Contains("disability") || t.Contains("need") || t.Contains("support"))
+        {
+            urls.Add("https://www.bradford.gov.uk/education-and-skills/school-support-services/school-support-services/");
+            urls.Add("https://www.bradford.gov.uk/education-and-skills/school-support-services/social-communication-interaction-and-learning-scil-team/");
+        }
         if (t.Contains("exclus") || t.Contains("expel") || t.Contains("suspend"))
-            urls.Add("https://www.bradford.gov.uk/education-and-skills/schools/exclusions/");
+            urls.Add("https://www.bradford.gov.uk/education-and-skills/school-support-services/exclusion-from-school/");
+        if (t.Contains("travel") || t.Contains("transport") || t.Contains("bus"))
+            return await GetSchoolTransportAsync(topic, ct); // full scrape with docs
+        if (t.Contains("uniform"))
+            urls.Add("https://www.bradford.gov.uk/education-and-skills/school-support-services/school-support-services/");
+
+        // Fallback: general education hub
+        if (urls.Count == 0)
+            urls.Add("https://www.bradford.gov.uk/education-and-skills/education-and-skills/");
 
         var tasks = urls.Distinct().Take(3).Select(u => FetchPageTextAsync(u, ct)).ToList();
         await Task.WhenAll(tasks);
-        var text = string.Join("\n\n---\n\n", tasks.Select(t2 => t2.Result).Where(r => !string.IsNullOrEmpty(r)));
-        return string.IsNullOrEmpty(text)
-            ? $"Education info: https://www.bradford.gov.uk/education-and-skills/"
-            : text;
+        var text = string.Join("\n\n---\n\n", tasks.Select(t2 => t2.Result).Where(r => r?.Length > 100));
+
+        var primaryUrl  = urls.FirstOrDefault() ?? "https://www.bradford.gov.uk/education-and-skills/education-and-skills/";
+        var followUpMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "admiss",   "Would you like to find schools near your postcode, or learn about free school meals eligibility?" },
+            { "term",     "Would you like to know about school admissions or find schools near your postcode?" },
+            { "meal",     "Would you like to know about school admissions or find your nearest schools?" },
+            { "send",     "Would you like help finding schools with SEND provision near your postcode?" },
+            { "exclus",   "Would you like information about school support services or admissions?" },
+            { "uniform",  "Would you like to know about free school meals or school admissions?" },
+        };
+
+        var followUp = "Would you like to find schools near your postcode or learn more about Bradford education services?";
+        foreach (var kv in followUpMap)
+            if (t.Contains(kv.Key)) { followUp = kv.Value; break; }
+
+        if (string.IsNullOrEmpty(text))
+            return $"For education information visit: https://www.bradford.gov.uk/education-and-skills/\n\nOFFICIAL_BRADFORD_LINK: [Bradford Council education and skills](https://www.bradford.gov.uk/education-and-skills/education-and-skills/)\nFOLLOW_UP_SUGGESTION: {followUp}";
+
+        return text + $"\n\nOFFICIAL_BRADFORD_LINK: [Bradford Council — {topic}]({primaryUrl})\nFOLLOW_UP_SUGGESTION: {followUp}";
     }
 
     // ── Text helpers ──────────────────────────────────────────────────────────
@@ -644,6 +891,185 @@ public partial class CouncilToolService
         var s when s.Contains("inadequate")   => "Inadequate",
         var s                                  => s
     };
+
+    // ── Infer age range from school phase / name ──────────────────────────────
+    private static string InferAgeRange(string phase, string name)
+    {
+        var p = (phase + " " + name).ToLower();
+        if (p.Contains("nursery") || p.Contains("pre-school")) return "Ages 3–4";
+        if (p.Contains("infant"))  return "Ages 4–7";
+        if (p.Contains("junior"))  return "Ages 7–11";
+        if (p.Contains("all-through") || p.Contains("all through")) return "Ages 3–18";
+        if (p.Contains("primary") || p.Contains("first school"))    return "Ages 4–11";
+        if (p.Contains("middle"))  return "Ages 9–13";
+        if (p.Contains("secondary") || p.Contains("high school") || p.Contains("grammar")) return "Ages 11–16";
+        if (p.Contains("sixth form") || p.Contains("16+") || p.Contains("post-16")) return "Ages 16–18";
+        if (p.Contains("college")) return "Ages 16–18";
+        if (p.Contains("special")) return "Ages 3–19";
+        return "";
+    }
+
+    // ── Fetch Ofsted rating from reports.ofsted.gov.uk search ────────────────
+    // Searches by school name and parses "Rating: Good/Outstanding/..." from results HTML.
+    private async Task<(string rating, string ofstedUrn)> FetchOfstedRatingAsync(string schoolName, CancellationToken ct)
+    {
+        try
+        {
+            var q    = Uri.EscapeDataString(schoolName + " bradford");
+            var url  = $"https://reports.ofsted.gov.uk/search?q={q}&level_1_types=1";
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible)");
+            var html = await (await client.GetAsync(url, ct)).Content.ReadAsStringAsync(ct);
+
+            // Strip tags
+            html = Regex.Replace(html, @"<script[^>]*>.*?</script>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            html = Regex.Replace(html, @"<style[^>]*>.*?</style>",   "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            var text = Regex.Replace(html, @"<[^>]+>", " ");
+            text = Regex.Replace(text, @"\s+", " ").Trim();
+
+            // Find the school entry in results (match by name proximity)
+            var nameIdx = text.IndexOf(schoolName, StringComparison.OrdinalIgnoreCase);
+            if (nameIdx < 0) return ("", "");
+
+            var snippet = text.Substring(nameIdx, Math.Min(400, text.Length - nameIdx));
+
+            // Extract rating
+            var ratingMatch = Regex.Match(snippet, @"Rating\s*:\s*(Outstanding|Good|Requires\s+Improvement|Inadequate)",
+                RegexOptions.IgnoreCase);
+            var rating = ratingMatch.Success
+                ? System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(
+                    ratingMatch.Groups[1].Value.Trim().ToLower())
+                : "";
+
+            // Extract Ofsted URN
+            var urnMatch = Regex.Match(snippet, @"URN\s*:\s*(\d+)", RegexOptions.IgnoreCase);
+            var urn      = urnMatch.Success ? urnMatch.Groups[1].Value : "";
+
+            _logger.LogInformation("Ofsted search: '{N}' → rating='{R}' urn='{U}'", schoolName, rating, urn);
+            return (rating, urn);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("FetchOfstedRating failed: {M}", ex.Message);
+            return ("", "");
+        }
+    }
+
+    // ── Bradford standard term dates (maintained schools 2025/26 & 2026/27) ──
+    // Academy schools set their own — noted on card. Source: Bradford Council.
+    private static List<TermPeriod> BuildBradfordTermDates()
+    {
+        var today = DateTime.Today;
+        var periods = new List<TermPeriod>
+        {
+            // ── 2025/26 ─────────────────────────────────────────────────────────
+            new() { Label="Autumn Term 1",       Dates="3 Sep – 24 Oct 2025",       Type="term" },
+            new() { Label="Autumn Half Term",    Dates="27–31 Oct 2025",             Type="halfterm" },
+            new() { Label="Autumn Term 2",       Dates="3 Nov – 19 Dec 2025",        Type="term" },
+            new() { Label="Christmas Holiday",   Dates="22 Dec 2025 – 2 Jan 2026",   Type="christmas" },
+            new() { Label="Spring Term 1",       Dates="5 Jan – 13 Feb 2026",        Type="term" },
+            new() { Label="Spring Half Term",    Dates="16–20 Feb 2026",             Type="halfterm" },
+            new() { Label="Spring Term 2",       Dates="23 Feb – 1 Apr 2026",        Type="term" },
+            new() { Label="Easter Holiday",      Dates="2–17 Apr 2026",              Type="easter" },
+            new() { Label="Summer Term 1",       Dates="20 Apr – 22 May 2026",       Type="term" },
+            new() { Label="Summer Half Term",    Dates="25–29 May 2026",             Type="halfterm" },
+            new() { Label="Summer Term 2",       Dates="1 Jun – 17 Jul 2026",        Type="term" },
+            new() { Label="Summer Holiday",      Dates="18 Jul – 2 Sep 2026",        Type="summer" },
+            // ── 2026/27 ─────────────────────────────────────────────────────────
+            new() { Label="Autumn Term 1",       Dates="3 Sep – 23 Oct 2026",        Type="term" },
+            new() { Label="Autumn Half Term",    Dates="26–30 Oct 2026",             Type="halfterm" },
+            new() { Label="Autumn Term 2",       Dates="2 Nov – 18 Dec 2026",        Type="term" },
+            new() { Label="Christmas Holiday",   Dates="21 Dec 2026 – 4 Jan 2027",   Type="christmas" },
+            new() { Label="Spring Term 1",       Dates="5 Jan – 12 Feb 2027",        Type="term" },
+            new() { Label="Spring Half Term",    Dates="15–19 Feb 2027",             Type="halfterm" },
+            new() { Label="Spring Term 2",       Dates="22 Feb – 26 Mar 2027",       Type="term" },
+            new() { Label="Easter Holiday",      Dates="29 Mar – 13 Apr 2027",       Type="easter" },
+            new() { Label="Summer Term 1",       Dates="14 Apr – 21 May 2027",       Type="term" },
+            new() { Label="Summer Half Term",    Dates="24–28 May 2027",             Type="halfterm" },
+            new() { Label="Summer Term 2",       Dates="31 May – 16 Jul 2027",       Type="term" },
+            new() { Label="Summer Holiday",      Dates="from 17 Jul 2027",           Type="summer" },
+        };
+
+        // Mark periods as past based on today's date
+        foreach (var p in periods)
+        {
+            var endMatch = Regex.Match(p.Dates, @"(\d{1,2})\s+(\w+)\s+(\d{4})$");
+            if (!endMatch.Success) endMatch = Regex.Match(p.Dates, @"(\d{1,2})\s+(\w+)\s+(\d{4})");
+            if (endMatch.Success &&
+                DateTime.TryParse($"{endMatch.Groups[1].Value} {endMatch.Groups[2].Value} {endMatch.Groups[3].Value}", out var end))
+                p.Past = end < today;
+        }
+
+        return periods;
+    }
+
+    // ── Fetch school website: term dates URL + facility list ─────────────────
+    private async Task<(string termUrl, List<string> facilities)> FetchSchoolWebsiteDataAsync(
+        string websiteBase, CancellationToken ct)
+    {
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible)");
+            var html = await (await client.GetAsync(websiteBase, ct)).Content.ReadAsStringAsync(ct);
+            var doc  = new HtmlDocument();
+            doc.LoadHtml(html);
+
+            // ── Term dates URL ────────────────────────────────────────────────
+            var termUrl    = string.Empty;
+            var candidates = doc.DocumentNode.SelectNodes("//a[@href]");
+            if (candidates != null)
+            {
+                foreach (var a in candidates)
+                {
+                    var href  = a.GetAttributeValue("href", "");
+                    var text  = CleanText(a.InnerText).ToLower();
+                    var lhref = href.ToLower();
+                    if ((text.Contains("term") || text.Contains("holiday") || text.Contains("date") || text.Contains("calendar")) &&
+                        (lhref.Contains("term") || lhref.Contains("holiday") || lhref.Contains("date") || lhref.Contains("calendar")))
+                    {
+                        termUrl = href.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                            ? href
+                            : Uri.TryCreate(new Uri(websiteBase), href, out var abs) ? abs.ToString() : "";
+                        if (!string.IsNullOrEmpty(termUrl)) break;
+                    }
+                }
+            }
+
+            // ── Facilities: scan all link text + nav text for known keywords ──
+            var allText = string.Join(" ", doc.DocumentNode.SelectNodes("//a | //li | //span | //p")
+                ?.Select(n => CleanText(n.InnerText).ToLower())
+                .Where(t => t.Length > 2)
+                ?? Enumerable.Empty<string>());
+
+            var facilityMap = new[]
+            {
+                (new[]{"breakfast club","breakfast"},            "🥣 Breakfast Club"),
+                (new[]{"after school club","before/after","after-school","wraparound","care club"}, "🌙 After-School Club"),
+                (new[]{"library","book corner"},                 "📚 Library"),
+                (new[]{"sports hall","gymnasium","sports facil"},"⚽ Sports Hall"),
+                (new[]{"swimming pool","swimming"},              "🏊 Swimming Pool"),
+                (new[]{"computer suite","ict suite","computing room"}, "💻 Computer Suite"),
+                (new[]{"nursery","early years"},                 "🌱 Nursery / EYFS"),
+                (new[]{"music room","music studio"},             "🎵 Music Room"),
+                (new[]{"forest school","outdoor classroom","forest garden"}, "🌳 Forest School"),
+                (new[]{"canteen","dining hall","school kitchen"}, "🍽️ School Dining"),
+                (new[]{"arabic","french","spanish","mandarin"},  "🌍 Languages"),
+                (new[]{"send","special educational needs","special needs support"}, "♿ SEND Provision"),
+            };
+
+            var found = new List<string>();
+            foreach (var (keywords, label) in facilityMap)
+                if (keywords.Any(k => allText.Contains(k, StringComparison.OrdinalIgnoreCase)))
+                    found.Add(label);
+
+            return (termUrl, found);
+        }
+        catch
+        {
+            return (string.Empty, new List<string>());
+        }
+    }
 
     // ── Geo helpers ───────────────────────────────────────────────────────────
     private async Task<(double lat, double lon)> GetLatLonAsync(string postcode, CancellationToken ct)

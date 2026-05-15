@@ -24,6 +24,10 @@ public partial class CouncilToolService
         if (postcodeData == null)
             return $"INVALID_POSTCODE: '{postcode}' does not appear to be a valid UK postcode. Ask the user to double-check it.";
 
+        var terminatedNote = postcodeData.IsTerminated
+            ? $" Note: {postcode} is a retired postcode — addresses may not be found."
+            : "";
+
         List<AddressOption> addresses = new();
 
         // 1st choice: getAddress.io — real Royal Mail PAF data, exact postcode match
@@ -62,7 +66,7 @@ public partial class CouncilToolService
         // Do NOT include individual address details in text — the UI shows the interactive
         // picker automatically. AI must only write one short sentence.
         if (addresses.Count == 0)
-            sb.AppendLine($"ADDRESS_INSTRUCTION: No properties found for {postcode}. Tell the user the postcode is valid but I couldn't find individual addresses — they can type theirs manually using the box that appeared below.");
+            sb.AppendLine($"ADDRESS_INSTRUCTION: No properties found for {postcode}.{terminatedNote} Tell the user the postcode is valid but I couldn't find individual addresses — they can type theirs manually using the box that appeared below.");
         else
             sb.AppendLine($"ADDRESS_INSTRUCTION: {addresses.Count} addresses found for {postcode}. The UI shows an interactive address picker. Write ONLY: \"I found {addresses.Count} addresses for {postcode} — please tap yours from the list below.\" Do not list or mention any addresses.");
 
@@ -504,12 +508,37 @@ public partial class CouncilToolService
     {
         try
         {
+            // Try live postcode first
             using var req  = new HttpRequestMessage(HttpMethod.Get, $"https://api.postcodes.io/postcodes/{Uri.EscapeDataString(postcode)}");
             using var resp = await _http.SendAsync(req, ct);
-            if (!resp.IsSuccessStatusCode) return null;
-            var json   = await resp.Content.ReadAsStringAsync(ct);
-            var result = JsonSerializer.Deserialize<PostcodeResponse>(json);
-            return result?.Status == 200 ? result.Result : null;
+            if (resp.IsSuccessStatusCode)
+            {
+                var json   = await resp.Content.ReadAsStringAsync(ct);
+                var result = JsonSerializer.Deserialize<PostcodeResponse>(json);
+                if (result?.Status == 200) return result.Result;
+            }
+
+            // Try terminated postcodes — real Bradford postcodes that have been retired.
+            // Users may have old letters/documents with these. Accept them but addresses may be empty.
+            using var termReq  = new HttpRequestMessage(HttpMethod.Get, $"https://api.postcodes.io/terminated_postcodes/{Uri.EscapeDataString(postcode)}");
+            using var termResp = await _http.SendAsync(termReq, ct);
+            if (termResp.IsSuccessStatusCode)
+            {
+                var termJson = await termResp.Content.ReadAsStringAsync(ct);
+                using var termDoc = JsonDocument.Parse(termJson);
+                if (termDoc.RootElement.TryGetProperty("status", out var st) && st.GetInt32() == 200)
+                {
+                    // Synthesise minimal PostcodeData so the rest of the flow continues
+                    return new PostcodeData
+                    {
+                        Postcode       = postcode,
+                        AdminDistrict  = "Bradford",
+                        IsTerminated   = true
+                    };
+                }
+            }
+
+            return null;
         }
         catch { return null; }
     }

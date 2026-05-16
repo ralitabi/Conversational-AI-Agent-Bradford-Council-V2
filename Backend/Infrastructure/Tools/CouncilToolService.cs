@@ -375,7 +375,35 @@ public partial class CouncilToolService : IToolService
         new ToolDefinition { Function = new FunctionDef { Name = "get_regeneration_info", Description = "Bradford regeneration and towns fund information. Call for: Keighley Towns Fund, Keighley regeneration projects, Keighley community grants, Shipley Towns Fund, Shipley regeneration projects, Bradford regeneration, towns fund grants, investment in Bradford.", Parameters = new { type="object", properties=new{query=new{type="string",description="Regeneration topic e.g. 'Keighley Towns Fund grants', 'Shipley regeneration projects'"}}, required=new[]{"query"} } } },
         new ToolDefinition { Function = new FunctionDef { Name = "get_open_data_info", Description = "Bradford Council open data, FOI and data protection. Call for: Freedom of Information requests, FOI, make an FOI request, Environmental Information Regulations, data protection, GDPR, subject access request, see my personal data, request CCTV footage, national data opt-out, open datasets, Bradford Council maps, publication scheme, records management.", Parameters = new { type="object", properties=new{query=new{type="string",description="Open data or information topic e.g. 'make a FOI request', 'subject access request', 'CCTV footage', 'my data rights'"}}, required=new[]{"query"} } } },
         new ToolDefinition { Function = new FunctionDef { Name = "get_paying_for_services_info", Description = "Bradford Council payments information. Call for: how to pay Bradford Council, pay a council invoice, dispute an invoice, request copy invoice, direct debit setup, paperless bills, money advice, debt help, help with managing money, struggling to pay council bills.", Parameters = new { type="object", properties=new{query=new{type="string",description="Payment topic e.g. 'pay my council invoice', 'set up direct debit', 'dispute invoice', 'help with debt'"}}, required=new[]{"query"} } } },
-        new ToolDefinition { Function = new FunctionDef { Name = "get_understanding_bradford_info", Description = "Bradford District facts, statistics and data. Call for: Bradford population, demographics, ethnicity, religion, unemployment, employment rates, health and life expectancy, poverty and deprivation, local economy data, ward profiles, constituency profiles, district and ward maps, Bradford census data.", Parameters = new { type="object", properties=new{query=new{type="string",description="Bradford district data topic e.g. 'Bradford population', 'ward profile', 'deprivation statistics', 'life expectancy Bradford'"}}, required=new[]{"query"} } } }
+        new ToolDefinition { Function = new FunctionDef { Name = "get_understanding_bradford_info", Description = "Bradford District facts, statistics and data. Call for: Bradford population, demographics, ethnicity, religion, unemployment, employment rates, health and life expectancy, poverty and deprivation, local economy data, ward profiles, constituency profiles, district and ward maps, Bradford census data.", Parameters = new { type="object", properties=new{query=new{type="string",description="Bradford district data topic e.g. 'Bradford population', 'ward profile', 'deprivation statistics', 'life expectancy Bradford'"}}, required=new[]{"query"} } } },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "find_sports_centres_near_postcode",
+                Description = "Find Bradford sports centres and swimming pools sorted by distance from a postcode. Returns a visual card grid with distance, facilities and phone. CALL THIS when the user asks to find sports centres, gyms, or pools near them and provides a postcode.",
+                Parameters  = new
+                {
+                    type       = "object",
+                    properties = new { postcode = new { type = "string", description = "Bradford postcode e.g. BD5 8LT" } },
+                    required   = new[] { "postcode" }
+                }
+            }
+        },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "get_sports_centre_details",
+                Description = "Get full details for a specific Bradford sports centre: address, phone, email, opening hours, all facilities. Call this when the user selects or asks about a specific centre by name.",
+                Parameters  = new
+                {
+                    type       = "object",
+                    properties = new { centre_name = new { type = "string", description = "Name of the sports centre e.g. 'Shipley Pool and Gym', 'Thornton Recreation Centre'" } },
+                    required   = new[] { "centre_name" }
+                }
+            }
+        }
     };
 
     // ── Tool Executor ─────────────────────────────────────────────────────────
@@ -437,6 +465,8 @@ public partial class CouncilToolService : IToolService
                 "get_open_data_info"                 => await GetOpenDataInfoAsync(args.GetValueOrDefault("query", ""), ct),
                 "get_paying_for_services_info"       => await GetPayingForServicesInfoAsync(args.GetValueOrDefault("query", ""), ct),
                 "get_understanding_bradford_info"    => await GetUnderstandingBradfordInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "find_sports_centres_near_postcode"  => await FindSportsCentresNearPostcodeAsync(args.GetValueOrDefault("postcode", ""), ct),
+                "get_sports_centre_details"          => await GetSportsCentreDetailsAsync(args.GetValueOrDefault("centre_name", ""), ct),
                 _                               => $"Unknown tool: {toolName}"
             };
         }

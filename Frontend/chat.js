@@ -144,11 +144,12 @@ async function doSend(override, displayText) {
       structured?.addresses, structured?.binDates,
       structured?.libraries, structured?.councilTaxInfo,
       structured?.councilTaxProperties,
-      structured?.schools, structured?.schoolDetails);
+      structured?.schools, structured?.schoolDetails, structured?.properties,
+      structured?.sportsCentres, structured?.sportsCentreDetails);
 
   } catch (err) {
     hideDots();
-    addAlexMsg("Sorry, I'm having trouble connecting. Please call Bradford Council on **01274 431000**.", [], null, null, null, null, null);
+    addAlexMsg("Sorry, I'm having trouble connecting. Please call Bradford Council on **01274 431000**.", [], null, null, null, null, null, null, null, null, null, null);
     console.error(err);
   }
   busy = false;
@@ -187,31 +188,30 @@ function updateStreamBubble(div, text) {
   if (span) { span.innerHTML = renderMarkdown(text); scrollEnd(); }
 }
 
-function finaliseStreamBubble(div, text, addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails) {
-  // Remove cursor, show time
+function finaliseStreamBubble(div, text, addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails, properties, sportsCentres, sportsCentreDetails) {
   const cursor = div.querySelector('.stream-cursor');
   if (cursor) cursor.remove();
   const timeEl = div.querySelector('.bubble-time');
   if (timeEl) { timeEl.textContent = now(); timeEl.style.display = ''; }
   saveToCurrentSession('alex', text);
 
-  // Split text first so we know whether there are multiple bubbles
   const parts = splitIntoMessages(text);
   const firstBubble = div.querySelector('.bubble.alex-bubble');
   if (firstBubble) firstBubble.querySelector('.stream-text').innerHTML = renderMarkdown(parts[0] ?? text);
 
-  // Cards attach to the LAST bubble only.
-  // Single bubble: add immediately. Multiple bubbles: skip here, last appendAlexBubble handles it.
   if (parts.length <= 1) {
     const wrapper = div.querySelector('.bubble.alex-bubble').parentElement;
     let extras = '';
     if (addresses && addresses.length > 0)       extras += buildAddressCard(addresses);
     if (binDates)                                 extras += buildBinDateCard(binDates);
-    if (libraries && libraries.length > 0)       extras += buildLibraryCard(libraries);
+    if (libraries && libraries.length > 0)        extras += buildLibraryCard(libraries);
     if (ctProperties && ctProperties.length > 0) extras += buildCouncilTaxPropertyPicker(ctProperties);
     else if (councilTax)                          extras += buildCouncilTaxCard(councilTax);
-    if (schools && schools.length > 0)           extras += buildSchoolListCard(schools);
+    if (schools && schools.length > 0)            extras += buildSchoolListCard(schools);
     if (schoolDetails)                            extras += buildSchoolCard(schoolDetails);
+    if (properties)                               extras += buildPropertyGrid(properties);
+    if (sportsCentres && sportsCentres.length > 0) extras += buildSportsCentreListCard(sportsCentres);
+    if (sportsCentreDetails)                      extras += buildSportsCentreDetailCard(sportsCentreDetails);
     if (extras) wrapper.insertAdjacentHTML('beforeend', extras);
   }
 
@@ -225,7 +225,8 @@ function finaliseStreamBubble(div, text, addresses, binDates, libraries, council
         appendAlexBubble(parts[idx],
           [], isLast ? addresses : null, isLast ? binDates : null,
           isLast ? libraries : null, isLast ? councilTax : null, isLast ? ctProperties : null,
-          isLast ? schools : null, isLast ? schoolDetails : null);
+          isLast ? schools : null, isLast ? schoolDetails : null, isLast ? properties : null,
+          isLast ? sportsCentres : null, isLast ? sportsCentreDetails : null);
       }, delay);
       delay += Math.min(1600, parts[idx].length * 20 + 600);
     }
@@ -277,14 +278,14 @@ function showInterimDots() {
 function hideInterimDots() { interimDots?.remove(); interimDots = null; }
 
 /* Entry point — single or multi-bubble */
-function addAlexMsg(text, sources, addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails) {
+function addAlexMsg(text, sources, addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails, properties, sportsCentres, sportsCentreDetails) {
   const parts = splitIntoMessages(text);
-  const hasCards = addresses || binDates || libraries || councilTax || ctProperties || schools || schoolDetails;
+  const hasCards = addresses || binDates || libraries || councilTax || ctProperties || schools || schoolDetails || properties || sportsCentres || sportsCentreDetails;
   if (parts.length <= 1 || hasCards) {
-    appendAlexBubble(text, sources, addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails);
+    appendAlexBubble(text, sources, addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails, properties, sportsCentres, sportsCentreDetails);
     return;
   }
-  appendAlexBubble(parts[0], [], null, null, null, null, null, null, null);
+  appendAlexBubble(parts[0], [], null, null, null, null, null, null, null, null, null, null);
   let delay = Math.min(1600, parts[0].length * 20 + 600);
   for (let i = 1; i < parts.length; i++) {
     const idx = i, isLast = idx === parts.length - 1;
@@ -294,25 +295,29 @@ function addAlexMsg(text, sources, addresses, binDates, libraries, councilTax, c
       appendAlexBubble(parts[idx],
         isLast ? sources : [], isLast ? addresses : null, isLast ? binDates : null,
         isLast ? libraries : null, isLast ? councilTax : null, isLast ? ctProperties : null,
-        isLast ? schools : null, isLast ? schoolDetails : null);
+        isLast ? schools : null, isLast ? schoolDetails : null, isLast ? properties : null,
+        isLast ? sportsCentres : null, isLast ? sportsCentreDetails : null);
     }, delay);
     delay += Math.min(1600, parts[idx].length * 20 + 600);
   }
 }
 
 /* Render one Alex bubble — time inside bubble (matches React) */
-function appendAlexBubble(text, sources, addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails) {
+function appendAlexBubble(text, sources, addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails, properties, sportsCentres, sportsCentreDetails) {
   const div = document.createElement('div');
   div.className = 'msg-row alex-row';
 
   let extras = '';
-  if (addresses && addresses.length > 0)       extras += buildAddressCard(addresses);
-  if (binDates)                                 extras += buildBinDateCard(binDates);
-  if (libraries && libraries.length > 0)       extras += buildLibraryCard(libraries);
-  if (ctProperties && ctProperties.length > 0) extras += buildCouncilTaxPropertyPicker(ctProperties);
-  else if (councilTax)                          extras += buildCouncilTaxCard(councilTax);
-  if (schools && schools.length > 0)           extras += buildSchoolListCard(schools);
-  if (schoolDetails)                            extras += buildSchoolCard(schoolDetails);
+  if (addresses && addresses.length > 0)        extras += buildAddressCard(addresses);
+  if (binDates)                                  extras += buildBinDateCard(binDates);
+  if (libraries && libraries.length > 0)         extras += buildLibraryCard(libraries);
+  if (ctProperties && ctProperties.length > 0)  extras += buildCouncilTaxPropertyPicker(ctProperties);
+  else if (councilTax)                           extras += buildCouncilTaxCard(councilTax);
+  if (schools && schools.length > 0)             extras += buildSchoolListCard(schools);
+  if (schoolDetails)                             extras += buildSchoolCard(schoolDetails);
+  if (properties)                                extras += buildPropertyGrid(properties);
+  if (sportsCentres && sportsCentres.length > 0) extras += buildSportsCentreListCard(sportsCentres);
+  if (sportsCentreDetails)                       extras += buildSportsCentreDetailCard(sportsCentreDetails);
 
   div.innerHTML = `
     <div class="alex-ava">${ALEX_ICON}</div>
@@ -671,6 +676,218 @@ function buildLibraryCard(libraries) {
       </div>
       <div class="lib-list">${buttons}</div>
     </div>`;
+}
+
+/* ── Sports centre type icon ── */
+function scTypeIcon(type) {
+  if (type === 'pool')        return `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" width="20" height="20"><path d="M2 12h2a2 2 0 0 1 2 2 2 2 0 0 0 2 2 2 2 0 0 0 2-2 2 2 0 0 1 2-2 2 2 0 0 1 2 2 2 2 0 0 0 2 2 2 2 0 0 0 2-2 2 2 0 0 1 2-2h2"/><path d="M2 7h2a2 2 0 0 1 2 2 2 2 0 0 0 2 2 2 2 0 0 0 2-2 2 2 0 0 1 2-2 2 2 0 0 1 2 2 2 2 0 0 0 2 2 2 2 0 0 0 2-2 2 2 0 0 1 2-2h2"/><path d="M8 4l4-2 4 2"/></svg>`;
+  if (type === 'gym')         return `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" width="20" height="20"><path d="M6.5 6.5h11M6.5 17.5h11M6 12h12M4 8V6a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h0a2 2 0 0 1-2-2v-2M20 8V6a2 2 0 0 0-2-2h0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2v-2"/></svg>`;
+  if (type === 'sports-hall') return `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" width="20" height="20"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10"/><path d="M2 12h20"/></svg>`;
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" width="20" height="20"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>`;
+}
+
+function scTypeGradient(type) {
+  if (type === 'pool')        return 'linear-gradient(135deg,#0369a1,#0ea5e9)';
+  if (type === 'gym')         return 'linear-gradient(135deg,#7c3aed,#a78bfa)';
+  if (type === 'sports-hall') return 'linear-gradient(135deg,#b45309,#f59e0b)';
+  return 'linear-gradient(135deg,#065f46,#34d399)';
+}
+
+function scTypeLabel(type) {
+  if (type === 'pool')        return 'Swimming Pool';
+  if (type === 'gym')         return 'Gym & Fitness';
+  if (type === 'sports-hall') return 'Sports Hall';
+  return 'Multi-Sport';
+}
+
+/* ── Sports centre list card grid ── */
+function buildSportsCentreListCard(centres) {
+  if (!centres || centres.length === 0) return '';
+
+  const cards = centres.map(c => {
+    const grad = scTypeGradient(c.type);
+    const icon = scTypeIcon(c.type);
+    const label = scTypeLabel(c.type);
+    const facs = (c.facilities || []).slice(0,4).map(f => `<span class="sc-fac-pill">${esc(f)}</span>`).join('');
+    return `
+      <div class="sc-card" onclick="selectSportsCentre('${esc2(c.name)}')">
+        <div class="sc-card-header" style="background:${grad}">
+          <div class="sc-card-icon">${icon}</div>
+          <div class="sc-card-header-info">
+            <span class="sc-type-label">${label}</span>
+            <span class="sc-dist-badge">${esc(c.distance)}</span>
+          </div>
+        </div>
+        <div class="sc-card-body">
+          <h4 class="sc-card-name">${esc(c.name)}</h4>
+          <p class="sc-card-address">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" width="12" height="12"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            ${esc(c.address)}
+          </p>
+          ${facs ? `<div class="sc-fac-pills">${facs}</div>` : ''}
+          ${c.phone ? `<p class="sc-card-phone">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" width="12" height="12"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            <a href="tel:${esc(c.phone)}" onclick="event.stopPropagation()">${esc(c.phone)}</a>
+          </p>` : ''}
+        </div>
+        <button class="sc-card-btn">View full details →</button>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="sc-list-wrap">
+      <div class="sc-list-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M2 12h2a2 2 0 0 1 2 2 2 2 0 0 0 2 2 2 2 0 0 0 2-2 2 2 0 0 1 2-2 2 2 0 0 1 2 2 2 2 0 0 0 2 2 2 2 0 0 0 2-2 2 2 0 0 1 2-2h2"/></svg>
+        Bradford Sports Centres &amp; Pools — tap a card for full details
+      </div>
+      <div class="sc-grid">${cards}</div>
+    </div>`;
+}
+
+function selectSportsCentre(name) {
+  doSend(`Tell me about ${name}`);
+}
+
+/* ── Sports centre detail card ── */
+function buildSportsCentreDetailCard(c) {
+  if (!c) return '';
+  const grad  = scTypeGradient(c.type);
+  const icon  = scTypeIcon(c.type);
+  const label = scTypeLabel(c.type);
+
+  const facs = (c.facilities || []).map(f => `<span class="sc-detail-fac">${esc(f)}</span>`).join('');
+
+  const hoursLines = (c.openingHours || '').split('·').map(s => s.trim()).filter(Boolean);
+  const hoursHtml = hoursLines.length > 1
+    ? hoursLines.map(l => `<div class="sc-hours-row">${esc(l)}</div>`).join('')
+    : `<div class="sc-hours-row">${esc(c.openingHours || 'Check website for current hours')}</div>`;
+
+  return `
+    <div class="sc-detail-card">
+
+      <div class="sc-detail-hero" style="background:${grad}">
+        <div class="sc-detail-hero-icon">${icon}</div>
+        <div class="sc-detail-hero-info">
+          <span class="sc-detail-type-label">${label}</span>
+          <h3 class="sc-detail-name">${esc(c.name)}</h3>
+        </div>
+      </div>
+
+      <div class="sc-detail-body">
+
+        <div class="sc-detail-contacts">
+          ${c.address ? `
+          <div class="sc-detail-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#0369a1" stroke-width="2" width="16" height="16"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <div>
+              <span class="sc-detail-label">Address</span>
+              <span class="sc-detail-val">${esc(c.address)}</span>
+            </div>
+          </div>` : ''}
+          ${c.phone ? `
+          <div class="sc-detail-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#0369a1" stroke-width="2" width="16" height="16"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            <div>
+              <span class="sc-detail-label">Phone</span>
+              <span class="sc-detail-val"><a href="tel:${esc(c.phone)}">${esc(c.phone)}</a></span>
+            </div>
+          </div>` : ''}
+          ${c.email ? `
+          <div class="sc-detail-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#0369a1" stroke-width="2" width="16" height="16"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <div>
+              <span class="sc-detail-label">Email</span>
+              <span class="sc-detail-val"><a href="mailto:${esc(c.email)}">${esc(c.email)}</a></span>
+            </div>
+          </div>` : ''}
+        </div>
+
+        ${c.openingHours ? `
+        <div class="sc-detail-section">
+          <div class="sc-detail-section-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#0369a1" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Opening Hours
+          </div>
+          <div class="sc-hours-grid">${hoursHtml}</div>
+        </div>` : ''}
+
+        ${facs ? `
+        <div class="sc-detail-section">
+          <div class="sc-detail-section-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#0369a1" stroke-width="2" width="14" height="14"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Facilities
+          </div>
+          <div class="sc-detail-facs">${facs}</div>
+        </div>` : ''}
+
+        ${c.pageUrl ? `
+        <a href="${esc(c.pageUrl)}" target="_blank" class="sc-detail-link-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          View on Bradford Council website
+        </a>` : ''}
+
+      </div>
+    </div>`;
+}
+
+/* ── Bradford Homes property grid ── */
+function buildPropertyGrid(result) {
+  if (!result || !result.items || result.items.length === 0) return '';
+
+  const cards = result.items.map(p => {
+    const img = p.imageUrl
+      ? `<div class="prop-img" style="background-image:url('${esc(p.imageUrl)}')"></div>`
+      : `<div class="prop-img prop-img-placeholder">
+           <svg viewBox="0 0 24 24" fill="none" stroke="#c5cde0" stroke-width="1.2" width="40" height="40">
+             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+             <polyline points="9 22 9 12 15 12 15 22"/>
+           </svg>
+           <span class="prop-no-photo">No photo</span>
+         </div>`;
+
+    const bedroomBadge = p.bedrooms
+      ? `<span class="prop-badge prop-badge-bed">🛏 ${esc(p.bedrooms)}</span>` : '';
+    const distBadge = p.distance && p.distance !== 'unknown'
+      ? `<span class="prop-badge prop-badge-dist">📍 ${esc(p.distance)}</span>` : '';
+
+    const features = (p.features || [])
+      .filter(f => f && f !== 'Property Shop')
+      .slice(0, 3)
+      .map(f => `<span class="prop-feature-tag">${esc(f)}</span>`).join('');
+
+    const viewBtn = p.detailUrl
+      ? `<a href="${esc(p.detailUrl)}" target="_blank" rel="noopener" class="prop-view-btn">View Property →</a>` : '';
+
+    return `<div class="prop-card">
+      ${img}
+      <div class="prop-body">
+        ${bedroomBadge || distBadge ? `<div class="prop-badges">${bedroomBadge}${distBadge}</div>` : ''}
+        <div class="prop-title">${esc(p.title || p.address)}</div>
+        <div class="prop-address">${esc(p.address)}</div>
+        ${p.rent     ? `<div class="prop-rent">${esc(p.rent)}</div>` : ''}
+        ${p.landlord ? `<div class="prop-landlord">${esc(p.landlord.trim())}</div>` : ''}
+        ${features   ? `<div class="prop-features">${features}</div>` : ''}
+        ${viewBtn}
+      </div>
+    </div>`;
+  }).join('');
+
+  const searchUrl = result.searchUrl || 'https://www.bradfordhomes.org.uk/PropertySearch/Results?AdvertTypes=21&Location.Name=Bradford&SearchRadius=10&SortOrder=0';
+  const total     = result.totalFound || result.items.length;
+
+  return `<div class="prop-grid-wrap">
+    <div class="prop-grid-head">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Available properties near <strong>${esc(result.location || 'Bradford')}</strong>
+      <span class="prop-total">${total} found</span>
+    </div>
+    <div class="prop-grid">${cards}</div>
+    <div class="prop-grid-footer">
+      <a href="${esc(searchUrl)}" target="_blank" rel="noopener" class="prop-search-more">
+        See all ${total} results on Bradford Homes →
+      </a>
+    </div>
+  </div>`;
 }
 
 /* ── Council tax card ── */

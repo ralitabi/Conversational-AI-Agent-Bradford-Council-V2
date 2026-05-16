@@ -66,6 +66,26 @@ public class AgentService : IAgentService
         - **get_paying_for_services_info** — Payments: pay a council invoice, dispute invoice, request copy invoice, direct debit, paperless bills, money advice, debt help
         - **get_understanding_bradford_info** — Bradford district data: population, demographics, ethnicity, religion, unemployment, health and life expectancy, poverty and deprivation, local economy, ward profiles, constituency profiles, district maps
 
+        ## Sports centres & pools — strict flow
+        TRIGGER: "sports centre near me","leisure centre near me","pool near me","gym near me",
+                 "find sports centre","nearest pool","nearest gym","sports centres bradford",
+                 "swimming pool near","which sports centre","closest pool"
+
+        0. If user directly names a specific centre (e.g. "Shipley Pool", "Thornton Recreation", "Sedbergh")
+           → call **get_sports_centre_details(centre_name="{name}")** immediately.
+        1. Scan message for a Bradford postcode. If present → call **find_sports_centres_near_postcode(postcode="{postcode}")** immediately.
+           If no postcode → ask: "What's your Bradford postcode? I'll find the nearest sports centres and pools."
+        2. Present ONE sentence: "Here are Bradford's sports centres nearest to {postcode} — tap one for full details."
+        3. User picks a centre → call **get_sports_centre_details(centre_name="{name}")** immediately.
+
+        ## CRITICAL — Sports centre card handling
+        When [[SPORTS_CENTRES_LIST]] appears in a tool result:
+        - The UI shows an interactive sports centre card grid automatically
+        - Write ONE short sentence only. Do NOT list centres yourself.
+        When [[SPORTS_CENTRE_CARD]] appears in a tool result:
+        - The UI shows a full detail card automatically
+        - Write 1–2 sentences: key facilities and how to book. Include the official link.
+
         ## Library queries — strict flow
         0. If user directly names a specific library (e.g. "Idle Library", "Bradford Central", "Shipley library")
            → call **get_library_details(library_name="{name}")** immediately. Do NOT ask for a postcode.
@@ -632,7 +652,7 @@ public class AgentService : IAgentService
                 var reply = response.Content ?? string.Empty;
                 await _conversation.SaveTurnAsync(request.SessionId, "assistant", reply, ct);
 
-                var (addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails, properties) = ExtractStructuredData(history);
+                var (addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails, properties, sportsCentres, sportsCentreDetails) = ExtractStructuredData(history);
 
                 return new ChatResponse
                 {
@@ -647,7 +667,9 @@ public class AgentService : IAgentService
                     CouncilTaxProperties = ctProperties,
                     Schools              = schools,
                     SchoolDetails        = schoolDetails,
-                    Properties           = properties
+                    Properties           = properties,
+                    SportsCentres        = sportsCentres,
+                    SportsCentreDetails  = sportsCentreDetails
                 };
             }
 
@@ -710,7 +732,7 @@ public class AgentService : IAgentService
         await _conversation.SaveTurnAsync(request.SessionId, "assistant", sb.ToString(), ct);
 
         // Emit structured data as a final special event so the frontend can render cards
-        var (addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails, properties) = ExtractStructuredData(history);
+        var (addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails, properties, sportsCentres, sportsCentreDetails) = ExtractStructuredData(history);
         var structured = new ChatResponse
         {
             Addresses            = addresses,
@@ -720,7 +742,9 @@ public class AgentService : IAgentService
             CouncilTaxProperties = ctProperties,
             Schools              = schools,
             SchoolDetails        = schoolDetails,
-            Properties           = properties
+            Properties           = properties,
+            SportsCentres        = sportsCentres,
+            SportsCentreDetails  = sportsCentreDetails
         };
         yield return "[STRUCTURED]" + System.Text.Json.JsonSerializer.Serialize(structured, _camelCase);
     }
@@ -762,17 +786,19 @@ public class AgentService : IAgentService
 
     // Extract structured data markers from tool results.
     // For addresses: keep the largest list (Bradford form > Overpass fallback).
-    internal static (List<AddressOption>? addresses, BinDateCard? binDates, List<LibraryOption>? libraries, CouncilTaxCard? councilTax, List<CouncilTaxPropertyOption>? ctProperties, List<SchoolOption>? schools, SchoolCard? schoolDetails, BradfordHomesResult? properties)
+    internal static (List<AddressOption>? addresses, BinDateCard? binDates, List<LibraryOption>? libraries, CouncilTaxCard? councilTax, List<CouncilTaxPropertyOption>? ctProperties, List<SchoolOption>? schools, SchoolCard? schoolDetails, BradfordHomesResult? properties, List<SportsCentreOption>? sportsCentres, SportsCentreCard? sportsCentreDetails)
         ExtractStructuredData(List<LlmMessage> history)
     {
-        List<AddressOption>?            addresses    = null;
-        BinDateCard?                    binDates     = null;
-        List<LibraryOption>?            libraries    = null;
-        CouncilTaxCard?                 councilTax   = null;
-        List<CouncilTaxPropertyOption>? ctProperties = null;
-        List<SchoolOption>?             schools      = null;
-        SchoolCard?                     schoolDetails = null;
-        BradfordHomesResult?            properties    = null;
+        List<AddressOption>?            addresses           = null;
+        BinDateCard?                    binDates            = null;
+        List<LibraryOption>?            libraries           = null;
+        CouncilTaxCard?                 councilTax          = null;
+        List<CouncilTaxPropertyOption>? ctProperties        = null;
+        List<SchoolOption>?             schools             = null;
+        SchoolCard?                     schoolDetails       = null;
+        BradfordHomesResult?            properties          = null;
+        List<SportsCentreOption>?       sportsCentres       = null;
+        SportsCentreCard?               sportsCentreDetails = null;
 
         foreach (var msg in history.OfType<ToolResultMessage>())
         {
@@ -847,9 +873,26 @@ public class AgentService : IAgentService
             {
                 try { properties = System.Text.Json.JsonSerializer.Deserialize<BradfordHomesResult>(propJson); } catch { }
             }
+
+            var scListJson = ExtractBetweenMarkers(content, "[[SPORTS_CENTRES_LIST]]", "[[/SPORTS_CENTRES_LIST]]");
+            if (scListJson != null)
+            {
+                try
+                {
+                    var parsed = System.Text.Json.JsonSerializer.Deserialize<List<SportsCentreOption>>(scListJson);
+                    if (parsed != null && parsed.Count > 0) sportsCentres = parsed;
+                }
+                catch { }
+            }
+
+            var scCardJson = ExtractBetweenMarkers(content, "[[SPORTS_CENTRE_CARD]]", "[[/SPORTS_CENTRE_CARD]]");
+            if (scCardJson != null)
+            {
+                try { sportsCentreDetails = System.Text.Json.JsonSerializer.Deserialize<SportsCentreCard>(scCardJson); } catch { }
+            }
         }
 
-        return (addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails, properties);
+        return (addresses, binDates, libraries, councilTax, ctProperties, schools, schoolDetails, properties, sportsCentres, sportsCentreDetails);
     }
 
     private static string? ExtractBetweenMarkers(string text, string open, string close)

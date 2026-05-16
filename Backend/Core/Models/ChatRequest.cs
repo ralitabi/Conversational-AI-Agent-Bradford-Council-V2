@@ -23,6 +23,56 @@ public class ChatResponse
     public List<CouncilTaxPropertyOption>? CouncilTaxProperties { get; set; }
     public List<SchoolOption>?             Schools            { get; set; }
     public SchoolCard?                     SchoolDetails      { get; set; }
+    public BradfordHomesResult?            Properties         { get; set; }
+    public List<SportsCentreOption>?       SportsCentres      { get; set; }
+    public SportsCentreCard?               SportsCentreDetails { get; set; }
+}
+
+public class SportsCentreOption
+{
+    public int          Number     { get; set; }
+    public string       Name       { get; set; } = string.Empty;
+    public string       Address    { get; set; } = string.Empty;
+    public string       Phone      { get; set; } = string.Empty;
+    public string       Distance   { get; set; } = string.Empty;
+    public List<string> Facilities { get; set; } = new();
+    public string       Slug       { get; set; } = string.Empty;
+    public string       Type       { get; set; } = string.Empty;
+}
+
+public class SportsCentreCard
+{
+    public string       Name         { get; set; } = string.Empty;
+    public string       Address      { get; set; } = string.Empty;
+    public string       Phone        { get; set; } = string.Empty;
+    public string       Email        { get; set; } = string.Empty;
+    public string       OpeningHours { get; set; } = string.Empty;
+    public List<string> Facilities   { get; set; } = new();
+    public string       PageUrl      { get; set; } = string.Empty;
+    public string       Type         { get; set; } = string.Empty;
+}
+
+public class BradfordHomesProperty
+{
+    public string       Id          { get; set; } = string.Empty;
+    public string       Title       { get; set; } = string.Empty;
+    public string       Address     { get; set; } = string.Empty;
+    public string       Rent        { get; set; } = string.Empty;
+    public string       Landlord    { get; set; } = string.Empty;
+    public string       Bedrooms    { get; set; } = string.Empty;
+    public string       Distance    { get; set; } = string.Empty;
+    public string       ImageUrl    { get; set; } = string.Empty;
+    public string       DetailUrl   { get; set; } = string.Empty;
+    public string       PropertyRef { get; set; } = string.Empty;
+    public List<string> Features    { get; set; } = new();
+}
+
+public class BradfordHomesResult
+{
+    public List<BradfordHomesProperty> Items       { get; set; } = new();
+    public int                         TotalFound  { get; set; }
+    public string                      SearchUrl   { get; set; } = string.Empty;
+    public string                      Location    { get; set; } = string.Empty;
 }
 
 public class CouncilTaxPropertyOption

@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Bradford.Core.Interfaces;
@@ -259,6 +260,103 @@ public partial class CouncilToolService : IToolService
         {
             Function = new FunctionDef
             {
+                Name        = "get_housing_info",
+                Description = "Get Bradford Council housing information scraped live from bradford.gov.uk. CALL THIS for: 'homeless', 'nowhere to sleep', 'rough sleeping', 'at risk of homelessness', 'behind on rent', 'mortgage arrears', 'find a home', 'council house', 'social housing', 'housing register', 'Bradford Homes', 'home improvements', 'repair grant', 'disabled adaptations', 'DFG', 'stairlift', 'landlord advice', 'tenant rights', 'damp', 'disrepair', 'HMO', 'empty homes', 'supported housing', 'private sector lettings', 'Incommunities', 'housing complaint'. Do NOT call this for searching available properties — use search_bradford_homes instead.",
+                Parameters  = new
+                {
+                    type       = "object",
+                    properties = new { query = new { type = "string", description = "What the user wants to know about housing e.g. 'homeless tonight', 'disabled facilities grant', 'landlord legal duties', 'HMO licence'" } },
+                    required   = new[] { "query" }
+                }
+            }
+        },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "search_bradford_homes",
+                Description = "Search Bradford Homes for currently available properties to rent. CALL THIS whenever the user asks to see available properties, social housing listings, what homes are available, or property search. Returns a visual property card grid. Supports filtering by location (postcode or area), number of bedrooms, max rent, and property type.",
+                Parameters  = new
+                {
+                    type       = "object",
+                    properties = new
+                    {
+                        location      = new { type = "string",  description = "Bradford postcode (e.g. BD5 8LT) or area name (e.g. Bradford, Keighley, Shipley)" },
+                        bedrooms      = new { type = "string",  description = "Number of bedrooms: 0=Studio, 1, 2, 3, 4, 5+" },
+                        max_rent      = new { type = "string",  description = "Maximum weekly/monthly rent amount" },
+                        property_type = new { type = "string",  description = "Property type: house, flat, bungalow, maisonette" },
+                        radius        = new { type = "string",  description = "Search radius in miles (default 10)" }
+                    },
+                    required = new[] { "location" }
+                }
+            }
+        },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "get_adult_social_care_info",
+                Description = "Get Bradford adult social care information. Call for: home care, care assessment, paying for care, direct payments, carers support, carer breaks, adult safeguarding, abuse, disability support, occupational therapy, mental health social work, supported living, residential care, preparation for adulthood.",
+                Parameters  = new { type = "object", properties = new { query = new { type = "string", description = "What the user wants to know about adult social care" } }, required = new[] { "query" } }
+            }
+        },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "get_children_families_info",
+                Description = "Get Bradford children and families information. Call for: report concern about a child, child safeguarding, family support, family hubs, early help, SEND local offer, fostering, childminder, Bradford Children and Families Trust.",
+                Parameters  = new { type = "object", properties = new { query = new { type = "string", description = "What the user wants to know about children and families services" } }, required = new[] { "query" } }
+            }
+        },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "get_transport_info",
+                Description = "Get Bradford transport and travel information. Call for: potholes, parking permits, parking fines, Blue Badge, bus pass, concessionary fares, roadworks, gritting, abandoned vehicles, cycling, street lights, fly-tipping, blocked drains, taxis, road safety, public transport.",
+                Parameters  = new { type = "object", properties = new { query = new { type = "string", description = "What the user wants to know about transport e.g. 'report a pothole', 'parking permit', 'blue badge', 'bus pass'" } }, required = new[] { "query" } }
+            }
+        },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "get_health_info",
+                Description = "Get Bradford public health information. Call for: mental health, alcohol/drugs, addiction, sexual health, weight management, quit smoking, health check, vaccines, cancer screening, child health, baby health, cold weather advice, warm spaces, needle and syringe programme.",
+                Parameters  = new { type = "object", properties = new { query = new { type = "string", description = "What the user wants to know about health e.g. 'mental health support', 'quit smoking', 'sexual health clinic'" } }, required = new[] { "query" } }
+            }
+        },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "get_clean_air_zone_info",
+                Description = "Get Bradford Clean Air Zone (CAZ) information. Call for: check if vehicle needs to pay, daily CAZ charge, how to pay CAZ, CAZ exemptions, CAZ grants, CAZ penalty, appeal CAZ penalty, what is CAZ, where is CAZ, visiting Bradford CAZ.",
+                Parameters  = new { type = "object", properties = new { query = new { type = "string", description = "What the user wants to know about the Clean Air Zone e.g. 'do I need to pay', 'exemption', 'penalty charge'" } }, required = new[] { "query" } }
+            }
+        },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
+                Name        = "get_business_rates_info",
+                Description = "Get Bradford business rates information. Call for: what are business rates, pay business rates, business rate reliefs, small business relief, rateable value, business rates appeal, valuation office, contact business rates team.",
+                Parameters  = new { type = "object", properties = new { query = new { type = "string", description = "What the user wants to know about business rates e.g. 'pay my rates', 'small business relief', 'appeal rateable value'" } }, required = new[] { "query" } }
+            }
+        },
+        new ToolDefinition { Function = new FunctionDef { Name = "get_licensing_info",     Description = "Bradford licensing info: taxis, food business registration, gambling, alcohol/entertainment, premises licence, temporary event notice, street trading, outdoor seating, scrap metal, tattooing, animal licences, licensing fees.", Parameters = new { type="object", properties=new{query=new{type="string",description="Licensing topic"}}, required=new[]{"query"} } } },
+        new ToolDefinition { Function = new FunctionDef { Name = "get_environment_info",   Description = "Bradford environment info: dog wardens/control, public rights of way/footpaths, conservation areas, listed buildings, biodiversity, climate change, Saltaire World Heritage, parks.", Parameters = new { type="object", properties=new{query=new{type="string",description="Environment topic"}}, required=new[]{"query"} } } },
+        new ToolDefinition { Function = new FunctionDef { Name = "get_community_info",     Description = "Bradford community info: allotments, domestic abuse, community grants, gypsies and travellers, armed forces, asylum seekers/refugees.", Parameters = new { type="object", properties=new{query=new{type="string",description="Community topic"}}, required=new[]{"query"} } } },
+        new ToolDefinition { Function = new FunctionDef { Name = "get_sports_leisure_info",Description = "Bradford sport and leisure: leisure centres, swimming lessons, fitness classes, Leisure Card prices, outdoor adventure, walking routes, cycling, over 50s activities, free armed forces gym access.", Parameters = new { type="object", properties=new{query=new{type="string",description="Sport or leisure topic"}}, required=new[]{"query"} } } },
+        new ToolDefinition { Function = new FunctionDef { Name = "get_elections_info",     Description = "Bradford elections and voting: register to vote, postal vote, voter ID, how to vote in person, proxy vote, standing as a candidate, election results, ward maps.", Parameters = new { type="object", properties=new{query=new{type="string",description="Elections topic"}}, required=new[]{"query"} } } },
+        new ToolDefinition { Function = new FunctionDef { Name = "get_arts_culture_info",  Description = "Bradford arts and culture: museums, galleries, Bradford City of Film, Bradford 2025, arts/culture grants, City Park, busking, what's on, visit Bradford.", Parameters = new { type="object", properties=new{query=new{type="string",description="Arts or culture topic"}}, required=new[]{"query"} } } },
+        new ToolDefinition { Function = new FunctionDef { Name = "get_complaints_info",    Description = "Bradford complaints and compliments: how to make a complaint, complaints procedure, adult social care complaints, Local Government Ombudsman, Housing Ombudsman, how to give compliments.", Parameters = new { type="object", properties=new{query=new{type="string",description="Complaints topic"}}, required=new[]{"query"} } } },
+        new ToolDefinition { Function = new FunctionDef { Name = "get_jobs_info",          Description = "Bradford Council jobs and careers: job vacancies, apprenticeships, social care jobs, teaching jobs, volunteering, graduate programmes.", Parameters = new { type="object", properties=new{query=new{type="string",description="Jobs topic"}}, required=new[]{"query"} } } },
+        new ToolDefinition
+        {
+            Function = new FunctionDef
+            {
                 Name        = "get_benefits_info",
                 Description = "Get Bradford Council benefits information scraped live from bradford.gov.uk. CALL THIS for: 'housing benefit', 'council tax reduction', 'council tax support', 'free school meals', 'universal credit', 'crisis fund', 'emergency help', 'food bank', 'hardship', 'discretionary housing payment', 'rent shortfall', 'assisted purchase scheme', 'household items', 'overpayment', 'payment dates', 'missing payment', 'appeal benefit', 'change of circumstances', 'backdating', 'cost of living', 'welfare advice', 'benefit forms', 'landlord benefits', 'myinfo review', 'benefit notification letter'. Do NOT call this for council tax band lookups — use lookup_council_tax_band instead.",
                 Parameters  = new
@@ -268,7 +366,8 @@ public partial class CouncilToolService : IToolService
                     required   = new[] { "query" }
                 }
             }
-        }
+        },
+        new ToolDefinition { Function = new FunctionDef { Name = "get_planning_info", Description = "Bradford planning and building control information. Call for: do I need planning permission, householder extensions, loft conversions, outbuildings, permitted development, make/submit/view/search planning applications, planning fees, planning appeals, planning decisions, planning committee, pre-application advice, permission in principle, lawful development certificates, planning enforcement, breach of planning, enforcement notices, neighbour building work, street naming and numbering, developer contributions, CIL, Section 106, planning policy, local plan, building regulations applications, building regulation fees, building control site inspections, demolition notice, dangerous structures, fire risk assessment, regularisation (building work without approval), duty holders, building safety levy, building control partnership, contact building control.", Parameters = new { type="object", properties=new{query=new{type="string",description="Planning or building control topic e.g. 'do I need planning permission for an extension', 'how to appeal a planning decision', 'building regulations application', 'report a dangerous structure'"}}, required=new[]{"query"} } } }
     };
 
     // ── Tool Executor ─────────────────────────────────────────────────────────
@@ -299,7 +398,29 @@ public partial class CouncilToolService : IToolService
                 "get_school_details"            => await GetSchoolDetailsAsync(args.GetValueOrDefault("school_name", ""), args.GetValueOrDefault("urn", ""), ct),
                 "get_education_info"            => await GetEducationInfoAsync(args.GetValueOrDefault("topic", "schools"), ct),
                 "get_school_transport"          => await GetSchoolTransportAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_housing_info"              => await GetHousingInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "search_bradford_homes"         => await SearchBradfordHomesAsync(
+                                                     args.GetValueOrDefault("location", "Bradford"),
+                                                     args.GetValueOrDefault("bedrooms", ""),
+                                                     args.GetValueOrDefault("max_rent", ""),
+                                                     args.GetValueOrDefault("property_type", ""),
+                                                     args.GetValueOrDefault("radius", "10"), ct),
+                "get_licensing_info"            => await GetLicensingInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_environment_info"          => await GetEnvironmentInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_community_info"            => await GetCommunityInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_sports_leisure_info"       => await GetSportsLeisureInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_elections_info"            => await GetElectionsInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_arts_culture_info"         => await GetArtsCultureInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_complaints_info"           => await GetComplaintsInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_jobs_info"                 => await GetJobsInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_adult_social_care_info"    => await GetAdultSocialCareInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_children_families_info"    => await GetChildrenFamiliesInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_transport_info"            => await GetTransportInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_health_info"               => await GetHealthInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_clean_air_zone_info"       => await GetCleanAirZoneInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_business_rates_info"       => await GetBusinessRatesInfoAsync(args.GetValueOrDefault("query", ""), ct),
                 "get_benefits_info"             => await GetBenefitsInfoAsync(args.GetValueOrDefault("query", ""), ct),
+                "get_planning_info"             => await GetPlanningInfoAsync(args.GetValueOrDefault("query", ""), ct),
                 _                               => $"Unknown tool: {toolName}"
             };
         }
@@ -308,6 +429,70 @@ public partial class CouncilToolService : IToolService
             _logger.LogError(ex, "Tool {Tool} failed", toolName);
             return $"Tool error: {ex.Message}";
         }
+    }
+
+    // ── Shared knowledge-map scraper (used by all info tools) ────────────────
+    private async Task<string> ScrapeKnowledgeMapAsync(
+        string query,
+        (string[] Keywords, string[] Urls, string Title, string FollowUp)[] map,
+        string fallbackUrl, string fallbackTitle, string fallbackFollowUp,
+        string header,
+        CancellationToken ct)
+    {
+        var q    = query.ToLower();
+        var urls = new List<string>();
+        var title    = "";
+        var followUp = "";
+
+        foreach (var (keywords, pages, pageTitle, pageFollowUp) in map)
+        {
+            if (keywords.Any(k => q.Contains(k, StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (var u in pages)
+                    if (!urls.Contains(u)) urls.Add(u);
+                if (string.IsNullOrEmpty(title)) { title = pageTitle; followUp = pageFollowUp; }
+                if (urls.Count >= 2) break;
+            }
+        }
+
+        if (urls.Count == 0)
+        {
+            urls.Add(fallbackUrl);
+            title    = fallbackTitle;
+            followUp = fallbackFollowUp;
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"{header} — query: \"{query}\"");
+        sb.AppendLine();
+
+        foreach (var url in urls.Take(2))
+        {
+            var html = await FetchHtmlAsync(url, ct);
+            if (string.IsNullOrEmpty(html)) continue;
+
+            var doc = new HtmlAgilityPack.HtmlDocument();
+            doc.LoadHtml(html);
+            foreach (var tag in new[] { "nav", "header", "footer", "script", "style", "aside", "noscript" })
+            {
+                var nodes = doc.DocumentNode.SelectNodes($"//{tag}");
+                if (nodes != null) foreach (var n in nodes.ToList()) n.Remove();
+            }
+            var main = doc.DocumentNode.SelectSingleNode("//main")
+                    ?? doc.DocumentNode.SelectSingleNode("//article")
+                    ?? doc.DocumentNode.SelectSingleNode("//body");
+            if (main == null) continue;
+
+            sb.AppendLine($"--- SOURCE: {url} ---");
+            sb.AppendLine(TruncateText(CleanText(main.InnerText), 3500));
+            sb.AppendLine();
+        }
+
+        sb.AppendLine($"OFFICIAL_BRADFORD_LINK: [{title}]({urls[0]})");
+        if (!string.IsNullOrEmpty(followUp))
+            sb.AppendLine($"FOLLOW_UP_SUGGESTION: {followUp}");
+
+        return sb.ToString();
     }
 
     // ── Shared helpers ────────────────────────────────────────────────────────

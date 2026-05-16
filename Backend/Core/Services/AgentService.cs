@@ -58,6 +58,7 @@ public class AgentService : IAgentService
         - **get_clean_air_zone_info** — Clean Air Zone: check if vehicle pays, daily charges, exemptions, grants, penalty charges, appeals
         - **get_business_rates_info** — Business rates: pay rates, reliefs, exemptions, valuation, appeals, contact team
         - **get_business_support_info** — Business support: grants, advice, commercial premises search, training courses, fire safety, health & safety at work, council properties for sale/to let, business leases, Bradford economy, procurement/tendering
+        - **get_your_council_info** — Council governance: about Bradford Council, how it works, chief executive, constitution, political composition, councillors, committee meetings and minutes, portfolio holders, budgets and spending, fees and charges, council buildings, City Hall, Lord Mayor, ePetitions, report fraud, equality and diversity, scrutiny, parish councils, community right to challenge, Bradford District Partnership, budget consultation
 
         ## Library queries — strict flow
         0. If user directly names a specific library (e.g. "Idle Library", "Bradford Central", "Shipley library")
@@ -350,6 +351,30 @@ public class AgentService : IAgentService
         ## Jobs → get_jobs_info(query)
         TRIGGER: "council job","work for Bradford","apprenticeship Bradford","social care job","teaching job","volunteer Bradford","graduate scheme Bradford","council vacancy"
 
+        ## Your Council / Governance → get_your_council_info(query)
+        TRIGGER: "about bradford council","how council works","council structure","council constitution","council rules",
+                 "chief executive","corporate management","council leadership",
+                 "political composition","which party controls","how many councillors","council party",
+                 "whistleblowing","report wrongdoing council","whistleblower",
+                 "best value notice","bradford improvement panel","council improvement","government commissioner",
+                 "committee meeting","council meeting","attend council","council minutes","meeting agenda","cabinet meeting",
+                 "my councillor","local councillor","find my councillor","ward councillor","who is my councillor",
+                 "portfolio holder","cabinet member","lead councillor",
+                 "council budget","council spending","council accounts","council fees","council charges","fees and charges",
+                 "council building","council office","city hall","britannia house","keighley town hall","council address",
+                 "lord mayor","invite lord mayor","lord mayor appeal","civic mayor",
+                 "petition","epetition","sign petition","create petition","council petition",
+                 "report fraud","benefit fraud","housing fraud","council tax fraud","tenancy fraud","fraud bradford",
+                 "types of fraud","counter fraud","anti bribery","whistleblowing policy",
+                 "equality and diversity","equality duty","public sector equality",
+                 "scrutiny","scrutiny committee","overview and scrutiny",
+                 "parish council","town council","local council","parish councillor",
+                 "community right to challenge","right to challenge",
+                 "bradford district partnership","district partnership","strategic partnership",
+                 "budget consultation","budget proposals","have your say budget",
+                 "modern slavery","national fraud initiative","best value"
+        → call get_your_council_info(query="{topic}")
+
         ## Business Support → get_business_support_info(query)
         TRIGGER: "business support","business advice","business grant","business funding","start a business","grow a business",
                  "commercial premises","commercial property","office to rent","shop to rent","industrial unit","warehouse",
@@ -460,6 +485,15 @@ public class AgentService : IAgentService
         | Council properties to let/buy | https://www.bradford.gov.uk/business/properties/properties-for-sale-and-to-let/ |
         | Bradford economy | https://www.bradford.gov.uk/business/bradford-economy/bradford-economy/ |
         | Council procurement / tendering | https://www.bradford.gov.uk/business/procurement/procurement/ |
+        | Your Bradford Council | https://www.bradford.gov.uk/your-council/ |
+        | About Bradford Council | https://www.bradford.gov.uk/your-council/about-bradford-council/about-bradford-council/ |
+        | Find your councillor | https://www.bradford.gov.uk/your-council/your-councillors/your-councillors/ |
+        | Council meetings and minutes | https://www.bradford.gov.uk/your-council/committees-meetings-and-minutes/meetings-and-minutes/ |
+        | Council budgets and spending | https://www.bradford.gov.uk/your-council/council-budgets-and-spending/council-budgets-and-spending/ |
+        | Council fees and charges | https://www.bradford.gov.uk/your-council/council-budgets-and-spending/bradford-council-fees-and-charges/ |
+        | Report fraud | https://www.bradford.gov.uk/your-council/report-fraud/report-fraud/ |
+        | ePetitions | https://www.bradford.gov.uk/your-council/epetitions/epetitions/ |
+        | The Lord Mayor | https://www.bradford.gov.uk/your-council/the-lord-mayor/the-lord-mayor/ |
 
         **Follow-up questions:** When a tool result contains `FOLLOW_UP_SUGGESTION: {text}`,
         always end the reply with that question on its own line after the link.

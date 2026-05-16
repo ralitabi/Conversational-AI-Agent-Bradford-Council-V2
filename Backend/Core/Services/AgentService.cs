@@ -59,6 +59,12 @@ public class AgentService : IAgentService
         - **get_business_rates_info** — Business rates: pay rates, reliefs, exemptions, valuation, appeals, contact team
         - **get_business_support_info** — Business support: grants, advice, commercial premises search, training courses, fire safety, health & safety at work, council properties for sale/to let, business leases, Bradford economy, procurement/tendering
         - **get_your_council_info** — Council governance: about Bradford Council, how it works, chief executive, constitution, political composition, councillors, committee meetings and minutes, portfolio holders, budgets and spending, fees and charges, council buildings, City Hall, Lord Mayor, ePetitions, report fraud, equality and diversity, scrutiny, parish councils, community right to challenge, Bradford District Partnership, budget consultation
+        - **get_births_deaths_marriages_info** — Register Office: register a birth/death/stillbirth, naming ceremonies, changing a child's name, marriages, civil partnerships, give notice of marriage, urgent marriages, renew vows, copy certificates, citizenship ceremonies, coroner, inquests, burials, cremations, bereavement costs, approved premises, fees
+        - **get_emergencies_info** — Emergencies: flooding, flood warnings, flood pack, protecting property from flooding, what to do in a flood, preparing for emergencies, emergency management, business continuity, planning a safe event, council service disruptions, bank holiday closure times, winter gritting emergency
+        - **get_regeneration_info** — Regeneration: Keighley Towns Fund, Keighley community grants, Shipley Towns Fund, Shipley regeneration projects, Bradford towns fund, regeneration investment
+        - **get_open_data_info** — Open data & information: FOI requests, Freedom of Information, Environmental Information Regulations, data protection, GDPR, subject access request, see personal data, request CCTV footage, national data opt-out, open datasets, Bradford maps
+        - **get_paying_for_services_info** — Payments: pay a council invoice, dispute invoice, request copy invoice, direct debit, paperless bills, money advice, debt help
+        - **get_understanding_bradford_info** — Bradford district data: population, demographics, ethnicity, religion, unemployment, health and life expectancy, poverty and deprivation, local economy, ward profiles, constituency profiles, district maps
 
         ## Library queries — strict flow
         0. If user directly names a specific library (e.g. "Idle Library", "Bradford Central", "Shipley library")
@@ -351,6 +357,61 @@ public class AgentService : IAgentService
         ## Jobs → get_jobs_info(query)
         TRIGGER: "council job","work for Bradford","apprenticeship Bradford","social care job","teaching job","volunteer Bradford","graduate scheme Bradford","council vacancy"
 
+        ## Births, Deaths & Marriages → get_births_deaths_marriages_info(query)
+        TRIGGER: "register a birth","register a death","register a stillbirth","baby born register",
+                 "birth certificate","death certificate","marriage certificate","copy certificate",
+                 "get married bradford","civil partnership","give notice of marriage","notice of marriage",
+                 "urgent marriage","renew vows","naming ceremony","naming ceremonies",
+                 "change child name","changing child name","citizenship ceremony","become british citizen",
+                 "coroner","inquest","refer death coroner","coroners office",
+                 "burial","cemetery","cremation","crematorium","bereavement","funeral bradford",
+                 "register office","bradford register office","family history certificate",
+                 "register office fees","ceremony fee","approved premises wedding"
+        → call get_births_deaths_marriages_info(query="{topic}")
+        IMPORTANT: Deaths must be registered within 5 days. Births within 42 days.
+
+        ## Emergencies → get_emergencies_info(query)
+        TRIGGER: "flood","flooding","flood warning","flood risk","flood pack","flood plan",
+                 "protecting property flood","what to do flood","house flooded","flooded",
+                 "prepare for emergency","emergency kit","emergency plan","emergency management",
+                 "business continuity","plan an event safety","event safety plan","event risk",
+                 "council service disruption","bank holiday opening","bank holiday hours","council closed",
+                 "winter emergency","gritting emergency","icy roads emergency"
+        → call get_emergencies_info(query="{topic}")
+        EMERGENCY: "flood" + immediate danger → "Call 999 immediately. Floodline: 0345 988 1188 (24/7)."
+
+        ## Regeneration → get_regeneration_info(query)
+        TRIGGER: "keighley towns fund","keighley regeneration","keighley investment","keighley grant",
+                 "shipley towns fund","shipley regeneration","shipley investment","shipley projects",
+                 "towns fund","bradford regeneration","regeneration bradford","regeneration grant"
+        → call get_regeneration_info(query="{topic}")
+
+        ## Open Data / FOI / Data Protection → get_open_data_info(query)
+        TRIGGER: "freedom of information","FOI","foi request","make foi request","information request",
+                 "environmental information regulations","EIR",
+                 "data protection","gdpr","subject access request","SAR","my data","personal data",
+                 "request cctv","cctv footage","national data opt out","data rights",
+                 "right to erasure","right to be forgotten","open data","council datasets",
+                 "publication scheme","records management","data protection request"
+        → call get_open_data_info(query="{topic}")
+
+        ## Paying for Services → get_paying_for_services_info(query)
+        TRIGGER: "pay council invoice","council invoice","pay my invoice","invoice from council",
+                 "dispute invoice","query invoice","wrong invoice","copy invoice","request invoice",
+                 "direct debit setup","set up direct debit","paperless bills","paperless billing",
+                 "money advice","debt advice","help with debt","struggling to pay","financial difficulty",
+                 "debt management","how to pay bradford","pay online bradford"
+        → call get_paying_for_services_info(query="{topic}")
+        NOTE: For council tax payment specifically, use get_council_tax_info or lookup_council_tax_band instead.
+
+        ## Understanding Bradford → get_understanding_bradford_info(query)
+        TRIGGER: "bradford population","bradford demographics","bradford ethnicity","bradford religion",
+                 "bradford unemployment","bradford economy data","bradford life expectancy",
+                 "bradford health statistics","bradford poverty","bradford deprivation",
+                 "ward profile","constituency profile","ward map","district map","bradford facts",
+                 "bradford statistics","bradford census","about bradford district","bradford data"
+        → call get_understanding_bradford_info(query="{topic}")
+
         ## Your Council / Governance → get_your_council_info(query)
         TRIGGER: "about bradford council","how council works","council structure","council constitution","council rules",
                  "chief executive","corporate management","council leadership",
@@ -494,6 +555,24 @@ public class AgentService : IAgentService
         | Report fraud | https://www.bradford.gov.uk/your-council/report-fraud/report-fraud/ |
         | ePetitions | https://www.bradford.gov.uk/your-council/epetitions/epetitions/ |
         | The Lord Mayor | https://www.bradford.gov.uk/your-council/the-lord-mayor/the-lord-mayor/ |
+        | Register a birth | https://www.bradford.gov.uk/births-deaths-marriages-and-civil-partnerships/births-and-naming/register-a-birth/ |
+        | Register a death | https://www.bradford.gov.uk/births-deaths-marriages-and-civil-partnerships/deaths/register-a-death/ |
+        | Marriages & civil partnerships | https://www.bradford.gov.uk/births-deaths-marriages-and-civil-partnerships/marriages-and-civil-partnerships/marriages-and-civil-partnerships/ |
+        | Copy certificate (birth/death/marriage) | https://www.bradford.gov.uk/births-deaths-marriages-and-civil-partnerships/certificates/get-a-copy-certificate/ |
+        | Burials and cemeteries | https://www.bradford.gov.uk/births-deaths-marriages-and-civil-partnerships/deaths/burials-and-cemeteries/ |
+        | Cremations | https://www.bradford.gov.uk/births-deaths-marriages-and-civil-partnerships/deaths/cremations-and-crematoria/ |
+        | Coroner's Office | https://www.bradford.gov.uk/births-deaths-marriages-and-civil-partnerships/coroners/the-coroners-office/ |
+        | Flooding information | https://www.bradford.gov.uk/emergencies/flooding/flooding/ |
+        | Preparing for emergencies | https://www.bradford.gov.uk/emergencies/what-to-do-in-an-emergency/preparing-for-emergencies-what-you-can-do/ |
+        | Bank holiday closure times | https://www.bradford.gov.uk/emergencies/council-service-disruptions/bank-holiday-closure-times/ |
+        | Keighley Towns Fund | https://www.bradford.gov.uk/regeneration/keighley-towns-fund/keighley-towns-fund/ |
+        | Shipley Towns Fund | https://www.bradford.gov.uk/regeneration/shipley-towns-fund/shipley-towns-fund/ |
+        | Freedom of Information | https://www.bradford.gov.uk/open-data/freedom-of-information/freedom-of-information/ |
+        | Data protection / subject access request | https://www.bradford.gov.uk/open-data/data-protection/make-a-data-protection-request/ |
+        | Pay a council invoice | https://www.bradford.gov.uk/paying-for-services/council-invoices/pay-your-bradford-council-invoice/ |
+        | Money and debt advice | https://www.bradford.gov.uk/paying-for-services/money-advice/help-with-managing-your-money-and-debt/ |
+        | Bradford population data | https://www.bradford.gov.uk/understanding-bradford-district/bradford-in-focus/population/ |
+        | Ward profiles | https://www.bradford.gov.uk/understanding-bradford-district/constituency-and-ward-profiles/ward-profiles/ |
 
         **Follow-up questions:** When a tool result contains `FOLLOW_UP_SUGGESTION: {text}`,
         always end the reply with that question on its own line after the link.

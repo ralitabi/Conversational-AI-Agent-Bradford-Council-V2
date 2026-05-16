@@ -47,7 +47,7 @@ public class AgentService : IAgentService
         - **get_licensing_info** — Licensing: taxis, food businesses, gambling, alcohol, premises licences, street trading, events, tattooing, animal licences
         - **get_environment_info** — Environment: dog wardens, public rights of way, conservation areas, listed buildings, biodiversity, climate change, parks
         - **get_community_info** — Community: allotments, domestic abuse, community grants, gypsies & travellers, armed forces, refugees
-        - **get_sports_leisure_info** — Sport & leisure: leisure centres, swimming, fitness classes, Leisure Card, outdoor adventure, walking, cycling
+        - **get_sports_leisure_info** — Sport & leisure: leisure centres (Sedbergh, Keighley, Shipley, Eccleshill, Ilkley, Manningham, Wyke, Squire Lane), swimming lessons, diving, fitness classes, Clubactive, Leisure Card, prices, accessible facilities, outdoor adventure (Doe Park, Buckden House, paddle activities), walking routes (self-guided Airedale/Haworth/Wharfedale/Bradford), cycling (Bikeability, active travel hubs, cycle to work, bike parking), sports camps, dance for life, sports clubs, book activities, Ride Bradford 2026, over 50s activities, armed forces free access
         - **get_elections_info** — Elections: register to vote, postal vote, voter ID, polling stations, standing as candidate, election results
         - **get_arts_culture_info** — Arts & culture: museums, galleries, Bradford City of Film, events, arts grants, City Park, busking
         - **get_complaints_info** — Complaints & compliments: complaint procedure, Ombudsman, social care complaints, giving compliments
@@ -343,7 +343,17 @@ public class AgentService : IAgentService
         TRIGGER: "allotment","allotments","domestic abuse","domestic violence","community grant","community funding","gypsies","travellers","armed forces community","asylum seeker","refugee","city of sanctuary"
 
         ## Sport & leisure → get_sports_leisure_info(query)
-        TRIGGER: "leisure centre","gym","swimming","fitness class","Leisure Card","outdoor adventure","walking route","cycling route","bikeability","over 50s activity","sports centre Bradford"
+        TRIGGER: "leisure centre","gym","swimming","swimming lesson","fitness class","Leisure Card","outdoor adventure",
+                 "walking route","self guided walk","cycling route","bikeability","over 50s activity","sports centre Bradford",
+                 "sedbergh","keighley leisure","shipley pool","eccleshill pool","bowling pool","ilkley pool","ilkley lido",
+                 "manningham sports","marley activities","thornton recreation","wyke sports","squire lane",
+                 "accessible facilities","inclusive fitness","diving","aquatics competition",
+                 "buckden house","doe park","paddle and play","children holiday course",
+                 "airedale walk","haworth walk","wharfedale walk","greenline mile",
+                 "active travel hub","cycling to work","bicycle parking","e-bike",
+                 "sports camp","activity camp","dance for life","sports club","book activities",
+                 "stay active","ride bradford","sports policy","swimming policy",
+                 "clubactive","aqua blast","aqua pulse","aquacise"
 
         ## Elections → get_elections_info(query)
         TRIGGER: "register to vote","postal vote","voter ID","polling station","standing as candidate","election results","ward map","proxy vote","electoral register"

@@ -57,6 +57,7 @@ public class AgentService : IAgentService
         - **get_health_info** — Public health: mental health, alcohol/drugs, sexual health, weight, smoking, health checks, vaccines, cancer screening, child health
         - **get_clean_air_zone_info** — Clean Air Zone: check if vehicle pays, daily charges, exemptions, grants, penalty charges, appeals
         - **get_business_rates_info** — Business rates: pay rates, reliefs, exemptions, valuation, appeals, contact team
+        - **get_business_support_info** — Business support: grants, advice, commercial premises search, training courses, fire safety, health & safety at work, council properties for sale/to let, business leases, Bradford economy, procurement/tendering
 
         ## Library queries — strict flow
         0. If user directly names a specific library (e.g. "Idle Library", "Bradford Central", "Shipley library")
@@ -349,6 +350,20 @@ public class AgentService : IAgentService
         ## Jobs → get_jobs_info(query)
         TRIGGER: "council job","work for Bradford","apprenticeship Bradford","social care job","teaching job","volunteer Bradford","graduate scheme Bradford","council vacancy"
 
+        ## Business Support → get_business_support_info(query)
+        TRIGGER: "business support","business advice","business grant","business funding","start a business","grow a business",
+                 "commercial premises","commercial property","office to rent","shop to rent","industrial unit","warehouse",
+                 "training course business","staff training","workforce training",
+                 "fire safety business","responsible person fire","fire regulations employer",
+                 "health and safety at work","hasaw","workplace safety","workplace accident","riddor","injury at work",
+                 "council property for sale","council property to let","buy council land","rent council property",
+                 "business lease","commercial lease","leasehold","tenants guide lease",
+                 "compulsory purchase","CPO",
+                 "bradford economy","invest in bradford","inward investment","economic intelligence","economic strategy",
+                 "commissioning adult care","care provider","health social care commissioning",
+                 "procurement","tender","council contract","become supplier","supply to council"
+        → call get_business_support_info(query="{topic}")
+
         ## Planning & Building Control → get_planning_info(query)
         TRIGGER: "planning permission","do i need planning","permitted development","extension planning","loft conversion","conservatory","outbuilding","porch planning",
                  "planning application","view planning","comment on planning","object to planning","planning objection","planning portal",
@@ -438,6 +453,13 @@ public class AgentService : IAgentService
         | CAZ check if you need to pay | https://www.bradford.gov.uk/clean-air-zone/payments-and-charges/check-if-you-need-to-pay/ |
         | Business rates | https://www.bradford.gov.uk/business/business-rates/business-rates/ |
         | Business rate reliefs | https://www.bradford.gov.uk/business/business-rates/business-rate-reliefs-and-exemptions/ |
+        | Business support | https://www.bradford.gov.uk/business/help-for-businesses/business-support/ |
+        | Commercial premises search | https://www.bradford.gov.uk/business/help-for-businesses/commercial-premises-property-search/ |
+        | Business training courses | https://www.bradford.gov.uk/business/help-for-businesses/training-courses-for-businesses/ |
+        | Health and safety at work | https://www.bradford.gov.uk/business/health-and-safety-at-work/health-and-safety-at-work/ |
+        | Council properties to let/buy | https://www.bradford.gov.uk/business/properties/properties-for-sale-and-to-let/ |
+        | Bradford economy | https://www.bradford.gov.uk/business/bradford-economy/bradford-economy/ |
+        | Council procurement / tendering | https://www.bradford.gov.uk/business/procurement/procurement/ |
 
         **Follow-up questions:** When a tool result contains `FOLLOW_UP_SUGGESTION: {text}`,
         always end the reply with that question on its own line after the link.

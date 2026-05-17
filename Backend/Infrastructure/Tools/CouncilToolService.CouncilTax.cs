@@ -222,8 +222,8 @@ public partial class CouncilToolService
             sb.AppendLine();
         }
 
-        if (!string.IsNullOrEmpty(address))
-            sb.AppendLine($"VOA band checker (GOV.UK): https://www.tax.service.gov.uk/check-council-tax-band/search");
+        // Always include the VOA band checker link so users can look up their band directly
+        sb.AppendLine($"VOA band checker (GOV.UK): https://www.tax.service.gov.uk/check-council-tax-band/search");
 
         sb.AppendLine($"OFFICIAL_BRADFORD_LINK: [{title}]({urls[0]})");
         if (!string.IsNullOrEmpty(followUp))
@@ -236,11 +236,23 @@ public partial class CouncilToolService
     private async Task<string> LookupCouncilTaxBandAsync(string postcode, string address, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(postcode))
-            return "NEEDS_POSTCODE: Please ask the user for their Bradford postcode.";
+            return "NEEDS_POSTCODE: Please ask the user for their full Bradford postcode (e.g. BD5 8LT).";
 
-        postcode = postcode.Trim().ToUpper();
+        // Normalize: uppercase, collapse all internal whitespace to single space
+        postcode = System.Text.RegularExpressions.Regex.Replace(postcode.Trim().ToUpper(), @"\s+", " ");
+
+        // Insert space before last 3 chars if missing (e.g. "BD58LT" → "BD5 8LT")
         if (!postcode.Contains(' ') && postcode.Length >= 5)
             postcode = postcode[..^3] + " " + postcode[^3..];
+
+        // Reject obviously incomplete postcodes (outward-code only, e.g. "BD5" or "BD10")
+        if (!postcode.Contains(' ') || postcode.Length < 6)
+            return $"NEEDS_FULL_POSTCODE: '{postcode}' looks incomplete. Please ask the user for their full postcode — it should look like 'BD5 8LT' or 'BD10 9AB'.";
+
+        // Validate format: must match standard UK postcode pattern
+        if (!System.Text.RegularExpressions.Regex.IsMatch(postcode,
+                @"^[A-Z]{1,2}\d{1,2}[A-Z]?\s\d[A-Z]{2}$"))
+            return $"INVALID_POSTCODE: '{postcode}' does not look like a valid UK postcode. Please ask the user to double-check it — for example 'BD5 8LT'.";
 
         // Cache full results by postcode — avoids repeat GOV.UK scrapes within 5 minutes
         var cacheKey = $"ct:{postcode.Replace(" ", "")}:{address?.ToUpper() ?? ""}";
@@ -437,11 +449,13 @@ public partial class CouncilToolService
                 {
                     var id   = n.GetAttributeValue("id",   "").ToLower();
                     var nm   = n.GetAttributeValue("name", "").ToLower();
-                    return id.Contains("post") || nm.Contains("post");
+                    return id.Contains("post") || nm.Contains("post") ||
+                           id.Contains("code") || nm.Contains("code");
                 });
             var pcField = pcNode?.GetAttributeValue("name", "")
                        ?? pcNode?.GetAttributeValue("id",   "")
                        ?? "postcode";
+            // GOV.UK accepts both "BD5 8LT" (with space) and "BD58LT" (without) — send with space
             fields[pcField] = postcode;
 
             var formAction = initDoc.DocumentNode

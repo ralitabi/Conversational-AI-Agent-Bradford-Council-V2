@@ -102,13 +102,34 @@ public partial class CouncilToolService
 
             foreach (var item in arr.EnumerateArray())
             {
-                var line1 = item.TryGetProperty("line_1", out var l1) ? l1.GetString() ?? "" : "";
-                var line2 = item.TryGetProperty("line_2", out var l2) ? l2.GetString() ?? "" : "";
-                var city  = item.TryGetProperty("town_or_city", out var tc) ? tc.GetString() ?? "Bradford" : "Bradford";
+                var subBuilding = item.TryGetProperty("sub_building_name",  out var sb)  ? sb.GetString()  ?? "" : "";
+                var buildingName= item.TryGetProperty("building_name",       out var bn)  ? bn.GetString()  ?? "" : "";
+                var line1       = item.TryGetProperty("line_1",              out var l1)  ? l1.GetString()  ?? "" : "";
+                var line2       = item.TryGetProperty("line_2",              out var l2)  ? l2.GetString()  ?? "" : "";
+                var city        = item.TryGetProperty("town_or_city",        out var tc)  ? tc.GetString()  ?? "Bradford" : "Bradford";
+
+                // Build the most descriptive line1 possible
+                if (string.IsNullOrWhiteSpace(line1))
+                {
+                    // Fall back to formatted_address array
+                    if (item.TryGetProperty("formatted_address", out var fa) && fa.ValueKind == JsonValueKind.Array)
+                    {
+                        var parts = fa.EnumerateArray()
+                                      .Select(p => p.GetString()?.Trim())
+                                      .Where(p => !string.IsNullOrEmpty(p))
+                                      .ToList();
+                        line1 = parts.FirstOrDefault() ?? "";
+                    }
+                }
 
                 if (string.IsNullOrWhiteSpace(line1)) continue;
 
-                var full = string.IsNullOrWhiteSpace(line2) ? line1 : $"{line1}, {line2}";
+                // Prefix sub_building or building_name when not already in line1
+                var prefix = string.Join(", ", new[]{ subBuilding, buildingName }
+                                               .Where(s => !string.IsNullOrWhiteSpace(s) &&
+                                                           !line1.Contains(s, StringComparison.OrdinalIgnoreCase)));
+                var full = string.Join(", ", new[]{ prefix, line1, line2 }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
                 list.Add(new AddressOption
                 {
                     Number   = num++,
@@ -245,15 +266,6 @@ public partial class CouncilToolService
         var list = new List<AddressOption>();
         int num  = 1;
 
-        // Known UK street suffix words — used to validate that parts[1] is really a street
-        var streetSuffixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "ROAD","STREET","LANE","AVENUE","DRIVE","CLOSE","WAY","PLACE",
-            "TERRACE","COURT","GROVE","RISE","VIEW","CRESCENT","ROW","BANK",
-            "HILL","GATE","PARADE","SQUARE","GARDENS","FOLD","WALK","MEWS",
-            "PARK","VALE","MOUNT","CROFT","END","GREEN","RING","PASS","TRAIL"
-        };
-
         // ── Strategy 1: Bradford-format comma-separated addresses ──
         // "813,MANCHESTER ROAD,BRADFORD,BD5 8LT"
         var nodes = doc.DocumentNode.SelectNodes("//a | //td | //li") ?? new HtmlNodeCollection(null);
@@ -268,28 +280,30 @@ public partial class CouncilToolService
                       ).Trim();
 
             // Addresses are short: "813,MANCHESTER ROAD,BRADFORD,BD5 8LT" ~ 35 chars
-            if (raw.Length < 8 || raw.Length > 100 || !raw.Contains(',')) continue;
+            if (raw.Length < 8 || raw.Length > 120 || !raw.Contains(',')) continue;
 
             var parts = raw.Split(',');
-            if (parts.Length < 3) continue;
+            if (parts.Length < 2) continue;
 
             var descriptor = parts[0].Trim();                           // "813"
             var street     = parts[1].Trim();                           // "MANCHESTER ROAD"
-            var cityRaw    = parts[2].Trim();                           // "BRADFORD"
+            var cityRaw    = parts.Length > 2 ? parts[2].Trim() : "";  // "BRADFORD"
             var pcRaw      = (parts.Length > 3 ? parts[3] : "").Trim();// "BD5 8LT"
 
-            // Validate: descriptor must be non-empty
-            if (descriptor.Length == 0 || street.Length < 4) continue;
+            // Validate: descriptor and street must be non-empty
+            if (descriptor.Length == 0 || street.Length < 3) continue;
 
-            // Validate: street must contain a known suffix word
-            var streetWords = street.Split(' ');
-            if (!streetWords.Any(w => streetSuffixes.Contains(w))) continue;
+            // Validate: postcode part must match the outward code (e.g. "BD5") if present
+            if (!string.IsNullOrEmpty(pcRaw))
+            {
+                var outward = postcode.Split(' ')[0];
+                if (!pcRaw.StartsWith(outward, StringComparison.OrdinalIgnoreCase) &&
+                    !pcRaw.Equals(postcode, StringComparison.OrdinalIgnoreCase)) continue;
+            }
 
-            // Validate: postcode part must match the outward code (e.g. "BD5")
-            var outward = postcode.Split(' ')[0];
-            if (!pcRaw.StartsWith(outward, StringComparison.OrdinalIgnoreCase) &&
-                !pcRaw.Equals(postcode,    StringComparison.OrdinalIgnoreCase) &&
-                !string.IsNullOrEmpty(pcRaw)) continue;
+            // Descriptor must start with a digit or be a flat/unit/name (not city/county words)
+            var skipWords = new[]{"ENGLAND","UNITED KINGDOM","WEST YORKSHIRE","YORKSHIRE","UK"};
+            if (skipWords.Any(w => descriptor.Equals(w, StringComparison.OrdinalIgnoreCase))) continue;
 
             var line1 = ToTitleCase($"{descriptor} {street}");
             var city  = ToTitleCase(cityRaw.Length > 0 ? cityRaw : "Bradford");
@@ -421,17 +435,25 @@ public partial class CouncilToolService
             if (!doc.RootElement.TryGetProperty("elements", out var elements))
                 return new();
 
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var list = new List<AddressOption>();
+            var seen    = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var list    = new List<AddressOption>();
+            var outward = postcode.Split(' ')[0];
 
             foreach (var el in elements.EnumerateArray())
             {
                 if (!el.TryGetProperty("tags", out var tags)) continue;
-                var houseNum = tags.TryGetProperty("addr:housenumber", out var hn) ? hn.GetString() : null;
-                var street   = tags.TryGetProperty("addr:street",      out var st) ? st.GetString() : null;
-                var city     = tags.TryGetProperty("addr:city",        out var ci) ? ci.GetString()
-                             : tags.TryGetProperty("addr:town",        out var to) ? to.GetString() : "Bradford";
+                var houseNum  = tags.TryGetProperty("addr:housenumber", out var hn) ? hn.GetString() : null;
+                var street    = tags.TryGetProperty("addr:street",      out var st) ? st.GetString() : null;
+                var city      = tags.TryGetProperty("addr:city",        out var ci) ? ci.GetString()
+                              : tags.TryGetProperty("addr:town",        out var to) ? to.GetString() : "Bradford";
+                var elPostcode = tags.TryGetProperty("addr:postcode",   out var pc) ? pc.GetString() : null;
+
                 if (string.IsNullOrEmpty(houseNum) || string.IsNullOrEmpty(street)) continue;
+
+                // If the element has a postcode tag, ensure it matches — prevents cross-postcode bleed
+                if (!string.IsNullOrEmpty(elPostcode) &&
+                    !elPostcode.Equals(postcode, StringComparison.OrdinalIgnoreCase) &&
+                    !elPostcode.StartsWith(outward, StringComparison.OrdinalIgnoreCase)) continue;
 
                 var line1 = $"{houseNum} {street}";
                 if (!seen.Add(line1.ToLowerInvariant())) continue;

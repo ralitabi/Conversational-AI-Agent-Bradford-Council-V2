@@ -80,7 +80,8 @@ public partial class CouncilToolService
         try
         {
             var encoded = Uri.EscapeDataString(postcode);
-            var url     = $"https://api.getaddress.io/find/{encoded}?api-key={apiKey}&expand=true";
+            // expand=true → structured fields; sort=True → house-number order; all=True → include all unit types
+            var url     = $"https://api.getaddress.io/find/{encoded}?api-key={apiKey}&expand=true&sort=True&all=True";
 
             using var req  = new HttpRequestMessage(HttpMethod.Get, url);
             using var resp = await _http.SendAsync(req, ct);
@@ -358,42 +359,50 @@ public partial class CouncilToolService
         if (!ll.HasValue) return new();
         var (lat, lon) = ll.Value;
 
-        // Pass 1 and Pass 2 run in parallel to halve latency
+        // Pass 1 (exact postcode tag) and Pass 2 (radius) run in parallel
         var pass1Task = OverpassQueryAsync(
-            $"[out:json][timeout:18];(node[\"addr:postcode\"=\"{postcode}\"][\"addr:housenumber\"];way[\"addr:postcode\"=\"{postcode}\"][\"addr:housenumber\"];);out center;",
+            $"[out:json][timeout:25];(node[\"addr:postcode\"=\"{postcode}\"][\"addr:housenumber\"];way[\"addr:postcode\"=\"{postcode}\"][\"addr:housenumber\"];relation[\"addr:postcode\"=\"{postcode}\"][\"addr:housenumber\"];);out center;",
             postcode, ct);
 
+        // 300m radius — covers even longer Bradford streets from the postcode centroid
         var pass2Task = OverpassQueryAsync(
-            $"[out:json][timeout:18];(node[\"addr:housenumber\"](around:200,{lat},{lon});way[\"addr:housenumber\"](around:200,{lat},{lon}););out center;",
+            $"[out:json][timeout:25];(node[\"addr:housenumber\"](around:300,{lat},{lon});way[\"addr:housenumber\"](around:300,{lat},{lon}););out center;",
             postcode, ct);
 
         await Task.WhenAll(pass1Task, pass2Task);
 
         var merged  = MergeAddressLists(postcode, pass1Task.Result, pass2Task.Result);
+
+        // Discover ALL unique streets from pass 1+2 results (no cap — fill every street)
         var streets = merged
             .Select(a => a.Line1.Contains(' ') ? string.Join(" ", a.Line1.Split(' ').Skip(1)) : "")
             .Where(s => s.Length > 3)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        // Pass 3: fetch ALL houses on discovered streets (fills gaps)
+        // Pass 3: for EVERY discovered street fetch all houses — no Take() limit
         var pass3Seen = new HashSet<string>(merged.Select(a => a.Line1.ToLowerInvariant()));
-        var pass3Tasks = streets.Take(3).Select(street =>
-            OverpassQueryAsync(
-                $"[out:json][timeout:18];" +
-                $"(node[\"addr:street\"=\"{street}\"][\"addr:housenumber\"](around:300,{lat},{lon});" +
-                $"way[\"addr:street\"=\"{street}\"][\"addr:housenumber\"](around:300,{lat},{lon}););" +
-                $"out center;",
-                postcode, ct)).ToList();
-
-        if (pass3Tasks.Count > 0)
+        if (streets.Count > 0)
         {
-            await Task.WhenAll(pass3Tasks);
-            foreach (var task in pass3Tasks)
-                foreach (var a in task.Result.Where(a => pass3Seen.Add(a.Line1.ToLowerInvariant())))
-                    merged.Add(a);
+            // Batch in groups of 5 to avoid hammering Overpass
+            for (int i = 0; i < streets.Count; i += 5)
+            {
+                var batch = streets.Skip(i).Take(5).ToList();
+                var pass3Tasks = batch.Select(street =>
+                    OverpassQueryAsync(
+                        $"[out:json][timeout:25];" +
+                        $"(node[\"addr:street\"=\"{street}\"][\"addr:housenumber\"](around:400,{lat},{lon});" +
+                        $"way[\"addr:street\"=\"{street}\"][\"addr:housenumber\"](around:400,{lat},{lon}););" +
+                        $"out center;",
+                        postcode, ct)).ToList();
+                await Task.WhenAll(pass3Tasks);
+                foreach (var task in pass3Tasks)
+                    foreach (var a in task.Result.Where(a => pass3Seen.Add(a.Line1.ToLowerInvariant())))
+                        merged.Add(a);
+            }
         }
 
+        // Sort numerically then alphabetically — no arbitrary upper cap
         var sorted = merged
             .OrderBy(a =>
             {
@@ -402,7 +411,6 @@ public partial class CouncilToolService
             })
             .ThenBy(a => a.Line1)
             .Select((a, i) => { a.Number = i + 1; return a; })
-            .Take(100)
             .ToList();
 
         _logger.LogInformation("Overpass final {Count} addresses for {Postcode}", sorted.Count, postcode);
@@ -489,7 +497,7 @@ public partial class CouncilToolService
     {
         try
         {
-            var url = $"https://nominatim.openstreetmap.org/search?format=json&postalcode={Uri.EscapeDataString(postcode)}&countrycodes=gb&addressdetails=1&limit=20";
+            var url = $"https://nominatim.openstreetmap.org/search?format=json&postalcode={Uri.EscapeDataString(postcode)}&countrycodes=gb&addressdetails=1&limit=100";
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Add("User-Agent", "BradfordCouncilAI/1.0 (council service)");
             using var resp = await _http.SendAsync(req, ct);
@@ -502,7 +510,7 @@ public partial class CouncilToolService
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var list = new List<AddressOption>();
 
-            foreach (var r in results.Take(20))
+            foreach (var r in results)
             {
                 var addr  = r.Address;
                 if (addr == null) continue;

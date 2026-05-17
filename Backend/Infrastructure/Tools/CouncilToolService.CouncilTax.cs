@@ -519,48 +519,60 @@ public partial class CouncilToolService
         return results;
     }
 
-    // Collect all property links, following GOV.UK pagination ("Next page" / page numbers)
-    private static async Task<List<(string Address, string Url)>> CollectAllPropertyLinksAsync(
+    // Collect all property links across all pages.
+    // GOV.UK paginates at 20 per page with ?page=N (0-indexed) for subsequent pages.
+    // We parse "Showing X - Y of Z results" to calculate total pages, then fetch all in parallel.
+    private async Task<List<(string Address, string Url)>> CollectAllPropertyLinksAsync(
         HttpClient client, string firstPageHtml, string firstPageUrl, string baseUrl, CancellationToken ct)
     {
-        var all   = new List<(string, string)>();
-        var seen  = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var html  = firstPageHtml;
-        var pageUrl = firstPageUrl;
+        var all  = new List<(string, string)>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        for (int page = 0; page < 10; page++) // max 10 pages safety limit
+        // Always collect page 1
+        foreach (var l in ParseGovUkPropertyLinks(firstPageHtml, baseUrl))
+            if (seen.Add(l.Url)) all.Add(l);
+
+        // Parse total count from "Showing 1 - 20 of 38 results"
+        var totalMatch = System.Text.RegularExpressions.Regex.Match(
+            firstPageHtml, @"Showing\s+\d+\s*[-–]\s*\d+\s+of\s+(\d+)\s+results",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        if (!totalMatch.Success) return all; // only 1 page or no count shown
+
+        var total      = int.Parse(totalMatch.Groups[1].Value);
+        const int perPage = 20;
+        var totalPages = (int)Math.Ceiling(total / (double)perPage);
+
+        if (totalPages <= 1) return all;
+
+        _logger.LogInformation("GOV.UK CT: {Total} properties across {Pages} pages", total, totalPages);
+
+        // Build the base URL for subsequent pages.
+        // firstPageUrl has the encrypted ?postcode=TOKEN; we append &page=N (0-indexed, page 2 = index 1)
+        var pageBaseUrl = firstPageUrl.TrimEnd('&');
+
+        // Fetch pages 2..N in parallel
+        var pageTasks = Enumerable.Range(1, totalPages - 1).Select(async pageIndex =>
         {
-            var links = ParseGovUkPropertyLinks(html, baseUrl);
-            foreach (var l in links)
-                if (seen.Add(l.Url)) all.Add(l);
-
-            // Look for a "Next" / "Next page" link
-            var doc = new HtmlDocument();
-            doc.LoadHtml(html);
-
-            var nextLink = doc.DocumentNode.SelectNodes("//a")?
-                .FirstOrDefault(a =>
-                {
-                    var t = CleanText(a.InnerText).ToLower();
-                    return t == "next" || t == "next page" || t.Contains("next page");
-                });
-
-            if (nextLink == null) break;
-
-            var nextHref = nextLink.GetAttributeValue("href", "");
-            if (string.IsNullOrEmpty(nextHref)) break;
-            if (!nextHref.StartsWith("http")) nextHref = baseUrl + nextHref;
-            if (nextHref == pageUrl) break;
+            var pageUrl = pageBaseUrl.Contains("page=")
+                ? System.Text.RegularExpressions.Regex.Replace(pageBaseUrl, @"page=\d+", $"page={pageIndex}")
+                : pageBaseUrl + $"&page={pageIndex}";
 
             try
             {
-                var nextResp = await client.GetAsync(nextHref, ct);
-                if (!nextResp.IsSuccessStatusCode) break;
-                html    = await nextResp.Content.ReadAsStringAsync(ct);
-                pageUrl = nextHref;
+                var resp = await client.GetAsync(pageUrl, ct);
+                if (!resp.IsSuccessStatusCode) return new List<(string Address, string Url)>();
+                var html = await resp.Content.ReadAsStringAsync(ct);
+                _logger.LogInformation("GOV.UK CT page {N} ({Url}): fetched", pageIndex + 1, pageUrl);
+                return ParseGovUkPropertyLinks(html, baseUrl);
             }
-            catch { break; }
-        }
+            catch { return new List<(string Address, string Url)>(); }
+        });
+
+        var pageResults = await Task.WhenAll(pageTasks);
+        foreach (var links in pageResults)
+            foreach (var l in links)
+                if (seen.Add(l.Url)) all.Add(l);
 
         return all;
     }
@@ -575,12 +587,13 @@ public partial class CouncilToolService
         doc.LoadHtml(html);
 
         // GOV.UK lists properties as <a> links whose href contains "property" or "uprn"
+        // Must WebUtility.HtmlDecode the href — HtmlAgilityPack does NOT decode &amp; automatically
         var anchors = doc.DocumentNode.SelectNodes("//a[@href]");
         if (anchors != null)
         {
             foreach (var a in anchors)
             {
-                var href = a.GetAttributeValue("href", "");
+                var href = WebUtility.HtmlDecode(a.GetAttributeValue("href", ""));
                 if (!href.Contains("property") && !href.Contains("uprn")) continue;
                 if (!href.StartsWith("http")) href = baseUrl + href;
                 var addr = CleanText(a.InnerText);

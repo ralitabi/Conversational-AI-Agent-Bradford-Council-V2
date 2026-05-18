@@ -49,6 +49,7 @@ builder.Services.AddScoped<IVectorStoreService, QdrantVectorStore>();
 builder.Services.AddScoped<IWebCrawlerService, CouncilWebCrawler>();
 builder.Services.AddScoped<IToolService, CouncilToolService>();
 builder.Services.AddMemoryCache(opt => opt.SizeLimit = 500); // max 500 cached lookups
+builder.Services.AddSingleton<AdminAuthService>();
 builder.Services.AddHostedService<SessionCleanupService>();
 
 // ── API & Swagger ──────────────────────────────────────────────────────────
@@ -69,6 +70,7 @@ builder.Services.AddCors(opt =>
     opt.AddDefaultPolicy(policy =>
         policy.WithOrigins(
                 "https://bradford-council-ai.vercel.app",
+                "https://bradford-council-admin.vercel.app",
                 "https://golden-pika-2ca976.netlify.app",
                 "http://localhost:5000",
                 "http://127.0.0.1:5000",
@@ -111,6 +113,53 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AgentDbContext>();
     await db.Database.EnsureCreatedAsync();
+    // Create AdminActivity table if it doesn't exist yet (added after initial schema)
+    await db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS "AdminActivities" (
+            "Id"        INTEGER NOT NULL CONSTRAINT "PK_AdminActivities" PRIMARY KEY AUTOINCREMENT,
+            "Username"  TEXT    NOT NULL,
+            "Name"      TEXT    NOT NULL,
+            "Action"    TEXT    NOT NULL,
+            "Detail"    TEXT,
+            "IpAddress" TEXT,
+            "Timestamp" TEXT    NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS "IX_AdminActivities_Username"  ON "AdminActivities" ("Username");
+        CREATE INDEX IF NOT EXISTS "IX_AdminActivities_Timestamp" ON "AdminActivities" ("Timestamp");
+        CREATE TABLE IF NOT EXISTS "AdminProfiles" (
+            "Id"           INTEGER NOT NULL CONSTRAINT "PK_AdminProfiles" PRIMARY KEY AUTOINCREMENT,
+            "Username"     TEXT    NOT NULL,
+            "DisplayName"  TEXT    NOT NULL DEFAULT '',
+            "Bio"          TEXT    NOT NULL DEFAULT '',
+            "AvatarBase64" TEXT,
+            "AvatarMime"   TEXT,
+            "UpdatedAt"    TEXT    NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS "IX_AdminProfiles_Username" ON "AdminProfiles" ("Username");
+        CREATE TABLE IF NOT EXISTS "ContactSessions" (
+            "Id"        TEXT NOT NULL CONSTRAINT "PK_ContactSessions" PRIMARY KEY,
+            "Name"      TEXT NOT NULL,
+            "Email"     TEXT,
+            "Phone"     TEXT,
+            "Subject"   TEXT NOT NULL,
+            "Status"    TEXT NOT NULL DEFAULT 'waiting',
+            "CreatedAt" TEXT NOT NULL,
+            "UpdatedAt" TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS "IX_ContactSessions_Status"    ON "ContactSessions" ("Status");
+        CREATE INDEX IF NOT EXISTS "IX_ContactSessions_CreatedAt" ON "ContactSessions" ("CreatedAt");
+        CREATE TABLE IF NOT EXISTS "ContactMessages" (
+            "Id"         INTEGER NOT NULL CONSTRAINT "PK_ContactMessages" PRIMARY KEY AUTOINCREMENT,
+            "SessionId"  TEXT    NOT NULL,
+            "Sender"     TEXT    NOT NULL,
+            "SenderName" TEXT    NOT NULL,
+            "Content"    TEXT    NOT NULL,
+            "IsRead"     INTEGER NOT NULL DEFAULT 0,
+            "Timestamp"  TEXT    NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS "IX_ContactMessages_SessionId" ON "ContactMessages" ("SessionId");
+        CREATE INDEX IF NOT EXISTS "IX_ContactMessages_Timestamp" ON "ContactMessages" ("Timestamp");
+        """);
 }
 
 // ── Middleware ─────────────────────────────────────────────────────────────

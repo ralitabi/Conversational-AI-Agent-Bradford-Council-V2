@@ -13,6 +13,7 @@ public class AgentDbContext : DbContext
     public DbSet<AdminProfile>     AdminProfiles     => Set<AdminProfile>();
     public DbSet<ContactSession>   ContactSessions   => Set<ContactSession>();
     public DbSet<ContactMessage>   ContactMessages   => Set<ContactMessage>();
+    public DbSet<AdminUser>        AdminUsers        => Set<AdminUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -46,6 +47,11 @@ public class AgentDbContext : DbContext
             e.HasKey(m => m.Id);
             e.HasIndex(m => m.SessionId);
             e.HasIndex(m => m.Timestamp);
+        });
+        modelBuilder.Entity<AdminUser>(e =>
+        {
+            e.HasKey(u => u.Id);
+            e.HasIndex(u => u.Username).IsUnique();
         });
     }
 }

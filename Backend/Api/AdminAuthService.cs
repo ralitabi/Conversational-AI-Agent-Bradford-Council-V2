@@ -27,6 +27,13 @@ public sealed class AdminAuthService
 
     public void Revoke(string token) => _sessions.TryRemove(token, out _);
 
+    public void RevokeAllForUser(string username)
+    {
+        foreach (var kv in _sessions)
+            if (kv.Value.Username.Equals(username, StringComparison.OrdinalIgnoreCase))
+                _sessions.TryRemove(kv.Key, out _);
+    }
+
     private void CleanupExpired()
     {
         foreach (var kv in _sessions)

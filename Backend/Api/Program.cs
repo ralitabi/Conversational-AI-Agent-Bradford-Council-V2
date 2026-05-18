@@ -1,4 +1,6 @@
-﻿using Bradford.Core.Interfaces;
+﻿using Bradford.Api.Controllers;
+using Bradford.Core.Interfaces;
+using Bradford.Core.Models;
 using Bradford.Core.Services;
 using Bradford.Infrastructure.Crawlers;
 using Bradford.Infrastructure.Data;
@@ -150,7 +152,41 @@ using (var scope = app.Services.CreateScope())
         );
         CREATE INDEX IF NOT EXISTS "IX_ContactMessages_SessionId" ON "ContactMessages" ("SessionId");
         CREATE INDEX IF NOT EXISTS "IX_ContactMessages_Timestamp" ON "ContactMessages" ("Timestamp");
+        CREATE TABLE IF NOT EXISTS "AdminUsers" (
+            "Id"           INTEGER NOT NULL CONSTRAINT "PK_AdminUsers" PRIMARY KEY AUTOINCREMENT,
+            "Username"     TEXT    NOT NULL,
+            "PasswordHash" TEXT    NOT NULL,
+            "Name"         TEXT    NOT NULL,
+            "Role"         TEXT    NOT NULL DEFAULT 'admin',
+            "IsActive"     INTEGER NOT NULL DEFAULT 1,
+            "CreatedAt"    TEXT    NOT NULL,
+            "LastLoginAt"  TEXT
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS "IX_AdminUsers_Username" ON "AdminUsers" ("Username");
         """);
+
+    // Add AssignedTo column to ContactSessions if missing (ALTER TABLE is idempotent via try-catch)
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"ContactSessions\" ADD COLUMN \"AssignedTo\" TEXT"); } catch { }
+
+    // Seed default admin users into DB if table is empty
+    if (!await db.AdminUsers.AnyAsync())
+    {
+        var cfgUsers = scope.ServiceProvider.GetRequiredService<IConfiguration>()
+            .GetSection("AdminUsers").Get<List<AdminUserConfig>>() ?? new();
+        foreach (var u in cfgUsers)
+        {
+            db.AdminUsers.Add(new AdminUser
+            {
+                Username     = u.Username,
+                PasswordHash = AdminUserHelper.Hash(u.Password),
+                Name         = u.Name,
+                Role         = u.Role,
+                IsActive     = true,
+                CreatedAt    = DateTime.UtcNow
+            });
+        }
+        await db.SaveChangesAsync();
+    }
 }
 
 // ── Middleware ─────────────────────────────────────────────────────────────

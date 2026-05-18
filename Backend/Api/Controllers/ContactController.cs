@@ -158,7 +158,7 @@ public class ContactController : ControllerBase
 
         var result = sessions.Select(s => new
         {
-            s.Id, s.Name, s.Email, s.Phone, s.Subject, s.Status, s.CreatedAt, s.UpdatedAt,
+            s.Id, s.Name, s.Email, s.Phone, s.Subject, s.Status, s.AssignedTo, s.CreatedAt, s.UpdatedAt,
             unread  = unreadCounts.TryGetValue(s.Id, out var u) ? u : 0,
             preview = lastMessages.TryGetValue(s.Id, out var lm) ? lm.preview.Substring(0, Math.Min(80, lm.preview.Length)) : "",
             lastAt  = lastMessages.TryGetValue(s.Id, out var la) ? la.lastAt : s.CreatedAt
@@ -223,6 +223,51 @@ public class ContactController : ControllerBase
         return Ok(new { success = true });
     }
 
+    // ── POST /api/contact/admin/{id}/transfer  (admin transfers session) ──────
+    [HttpPost("admin/{sessionId}/transfer")]
+    public async Task<IActionResult> Transfer(string sessionId, [FromBody] TransferRequest req, CancellationToken ct)
+    {
+        var admin = AdminSession();
+        if (admin is null) return Unauthorized();
+
+        var session = await _db.ContactSessions.FindAsync(new object[] { sessionId }, ct);
+        if (session is null) return NotFound();
+
+        var targetUser = await _db.AdminUsers
+            .FirstOrDefaultAsync(u => u.Username == req.ToUsername && u.IsActive, ct);
+        if (targetUser is null) return BadRequest(new { error = "Target user not found or inactive." });
+
+        session.AssignedTo = req.ToUsername;
+        session.UpdatedAt  = DateTime.UtcNow;
+
+        _db.ContactMessages.Add(new ContactMessage
+        {
+            SessionId  = sessionId,
+            Sender     = "system",
+            SenderName = "System",
+            Content    = $"Session transferred from {admin.Name} to {targetUser.Name}.",
+            Timestamp  = DateTime.UtcNow,
+            IsRead     = false
+        });
+
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("Admin [{Name}] transferred session {SessionId} to {Target}", admin.Name, sessionId, req.ToUsername);
+        return Ok(new { success = true, assignedTo = targetUser.Name });
+    }
+
+    // ── GET /api/contact/admin/staff  (list active admins for transfer dropdown) ─
+    [HttpGet("admin/staff")]
+    public async Task<IActionResult> GetStaff(CancellationToken ct)
+    {
+        if (AdminSession() is null) return Unauthorized();
+        var users = await _db.AdminUsers
+            .Where(u => u.IsActive)
+            .OrderBy(u => u.Name)
+            .Select(u => new { u.Username, u.Name, u.Role })
+            .ToListAsync(ct);
+        return Ok(users);
+    }
+
     // ── PATCH /api/contact/admin/{id}/status  (admin closes/reopens) ──────────
     [HttpPatch("admin/{sessionId}/status")]
     public async Task<IActionResult> UpdateStatus(string sessionId, [FromBody] UpdateStatusRequest req, CancellationToken ct)
@@ -245,3 +290,4 @@ public class ContactController : ControllerBase
 public sealed class StartContactRequest  { public string? Name { get; set; } public string? Email { get; set; } public string? Phone { get; set; } public string? Subject { get; set; } public string? Message { get; set; } }
 public sealed class SendMessageRequest   { public string? Content { get; set; } }
 public sealed class UpdateStatusRequest  { public string Status { get; set; } = "closed"; }
+public sealed class TransferRequest      { public string? ToUsername { get; set; } }

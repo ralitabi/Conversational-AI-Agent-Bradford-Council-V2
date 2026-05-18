@@ -2,6 +2,8 @@ using Bradford.Core.Models;
 using Bradford.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Bradford.Api.Controllers;
 
@@ -54,41 +56,56 @@ public class AdminController : ControllerBase
     [HttpPost("auth")]
     public async Task<IActionResult> Login([FromBody] AdminLoginRequest req, CancellationToken ct)
     {
-        var users = _config.GetSection("AdminUsers").Get<List<AdminUserConfig>>() ?? new();
-        var user  = users.FirstOrDefault(u =>
-            u.Username.Equals(req.Username?.Trim(), StringComparison.OrdinalIgnoreCase) &&
-            u.Password == req.Password);
+        var uname = req.Username?.Trim() ?? "";
+        string resolvedName, resolvedRole;
 
-        if (user is null)
+        // 1. Check DB users first
+        var dbUser = await _db.AdminUsers
+            .FirstOrDefaultAsync(u => u.Username == uname && u.IsActive, ct);
+
+        if (dbUser != null && AdminUserHelper.Verify(req.Password ?? "", dbUser.PasswordHash))
         {
-            _logger.LogWarning("Failed admin login for '{Username}' from {Ip}", req.Username, ClientIp());
-            // Log failed attempt (no session yet — store directly)
-            _db.AdminActivities.Add(new AdminActivity
-            {
-                Username  = req.Username?.Trim() ?? "unknown",
-                Name      = "Unknown",
-                Action    = "login_failed",
-                Detail    = $"IP: {ClientIp()}",
-                IpAddress = ClientIp(),
-                Timestamp = DateTime.UtcNow
-            });
+            resolvedName = dbUser.Name;
+            resolvedRole = dbUser.Role;
+            dbUser.LastLoginAt = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
-            return Unauthorized(new { error = "Invalid username or password." });
+        }
+        else
+        {
+            // 2. Fallback: appsettings users
+            var configs = _config.GetSection("AdminUsers").Get<List<AdminUserConfig>>() ?? new();
+            var cfgUser = configs.FirstOrDefault(u =>
+                u.Username.Equals(uname, StringComparison.OrdinalIgnoreCase) &&
+                u.Password == req.Password);
+
+            if (cfgUser is null)
+            {
+                _logger.LogWarning("Failed admin login for '{Username}' from {Ip}", uname, ClientIp());
+                _db.AdminActivities.Add(new AdminActivity
+                {
+                    Username = uname, Name = "Unknown", Action = "login_failed",
+                    Detail = $"IP: {ClientIp()}", IpAddress = ClientIp(), Timestamp = DateTime.UtcNow
+                });
+                await _db.SaveChangesAsync(ct);
+                return Unauthorized(new { error = "Invalid username or password." });
+            }
+            resolvedName = cfgUser.Name;
+            resolvedRole = cfgUser.Role;
         }
 
-        var session = _auth.CreateSession(user.Username, user.Name, user.Role)!;
+        var session = _auth.CreateSession(uname, resolvedName, resolvedRole)!;
 
         _db.AdminActivities.Add(new AdminActivity
         {
-            Username  = user.Username,
-            Name      = user.Name,
+            Username  = session.Username,
+            Name      = session.Name,
             Action    = "login",
             Detail    = $"IP: {ClientIp()}",
             IpAddress = ClientIp(),
             Timestamp = DateTime.UtcNow
         });
         await _db.SaveChangesAsync(ct);
-        _logger.LogInformation("Admin login: {Name} ({Username}) from {Ip}", user.Name, user.Username, ClientIp());
+        _logger.LogInformation("Admin login: {Name} ({Username}) from {Ip}", session.Name, session.Username, ClientIp());
 
         return Ok(new { token = session.Token, name = session.Name, username = session.Username, role = session.Role, expiresAt = session.ExpiresAt });
     }
@@ -454,10 +471,150 @@ public class AdminController : ControllerBase
 
         return Ok(new { staff, recentActivity = activity.Take(50) });
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // USER MANAGEMENT (superadmin only)
+    // ════════════════════════════════════════════════════════════════════════
+
+    // GET /api/admin/users
+    [HttpGet("users")]
+    public async Task<IActionResult> GetUsers(CancellationToken ct)
+    {
+        var s = CurrentSession();
+        if (s is null) return Unauthorized();
+        if (s.Role != "superadmin") return StatusCode(403, new { error = "Superadmin only." });
+
+        var dbUsers = await _db.AdminUsers.OrderBy(u => u.CreatedAt).ToListAsync(ct);
+        var result  = dbUsers.Select(u => new {
+            u.Username, u.Name, u.Role, u.IsActive, u.CreatedAt, u.LastLoginAt
+        });
+        return Ok(result);
+    }
+
+    // POST /api/admin/users — create new staff account
+    [HttpPost("users")]
+    public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest req, CancellationToken ct)
+    {
+        var s = CurrentSession();
+        if (s is null) return Unauthorized();
+        if (s.Role != "superadmin") return StatusCode(403, new { error = "Superadmin only." });
+        if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrWhiteSpace(req.Password) || string.IsNullOrWhiteSpace(req.Name))
+            return BadRequest(new { error = "Username, name and password are required." });
+
+        if (await _db.AdminUsers.AnyAsync(u => u.Username == req.Username.Trim(), ct))
+            return Conflict(new { error = "Username already exists." });
+
+        _db.AdminUsers.Add(new AdminUser
+        {
+            Username     = req.Username.Trim(),
+            PasswordHash = AdminUserHelper.Hash(req.Password),
+            Name         = req.Name.Trim(),
+            Role         = req.Role is "superadmin" ? "superadmin" : "admin",
+            IsActive     = true,
+            CreatedAt    = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(ct);
+        await LogAsync(s, "create_user", $"Created user: {req.Username}", ct);
+        return Ok(new { success = true });
+    }
+
+    // PATCH /api/admin/users/{username}/password
+    [HttpPatch("users/{username}/password")]
+    public async Task<IActionResult> ChangePassword(string username, [FromBody] ChangePasswordRequest req, CancellationToken ct)
+    {
+        var s = CurrentSession();
+        if (s is null) return Unauthorized();
+        // Superadmin can change anyone's; admins can only change their own
+        if (s.Role != "superadmin" && !s.Username.Equals(username, StringComparison.OrdinalIgnoreCase))
+            return StatusCode(403, new { error = "Insufficient permissions." });
+        if (string.IsNullOrWhiteSpace(req.NewPassword) || req.NewPassword.Length < 6)
+            return BadRequest(new { error = "Password must be at least 6 characters." });
+
+        var user = await _db.AdminUsers.FirstOrDefaultAsync(u => u.Username == username, ct);
+        if (user is null) return NotFound();
+
+        user.PasswordHash = AdminUserHelper.Hash(req.NewPassword);
+        await _db.SaveChangesAsync(ct);
+        await LogAsync(s, "change_password", $"Changed password for: {username}", ct);
+        return Ok(new { success = true });
+    }
+
+    // PATCH /api/admin/users/{username}/role
+    [HttpPatch("users/{username}/role")]
+    public async Task<IActionResult> ChangeRole(string username, [FromBody] ChangeRoleRequest req, CancellationToken ct)
+    {
+        var s = CurrentSession();
+        if (s is null) return Unauthorized();
+        if (s.Role != "superadmin") return StatusCode(403, new { error = "Superadmin only." });
+        if (req.Role is not ("admin" or "superadmin"))
+            return BadRequest(new { error = "Role must be 'admin' or 'superadmin'." });
+
+        var user = await _db.AdminUsers.FirstOrDefaultAsync(u => u.Username == username, ct);
+        if (user is null) return NotFound();
+
+        user.Role = req.Role;
+        await _db.SaveChangesAsync(ct);
+        await LogAsync(s, "change_role", $"Set {username} role to {req.Role}", ct);
+        return Ok(new { success = true });
+    }
+
+    // PATCH /api/admin/users/{username}/status
+    [HttpPatch("users/{username}/status")]
+    public async Task<IActionResult> ToggleStatus(string username, [FromBody] ToggleStatusRequest req, CancellationToken ct)
+    {
+        var s = CurrentSession();
+        if (s is null) return Unauthorized();
+        if (s.Role != "superadmin") return StatusCode(403, new { error = "Superadmin only." });
+
+        var user = await _db.AdminUsers.FirstOrDefaultAsync(u => u.Username == username, ct);
+        if (user is null) return NotFound();
+
+        user.IsActive = req.IsActive;
+        await _db.SaveChangesAsync(ct);
+        if (!req.IsActive) _auth.RevokeAllForUser(username);
+        await LogAsync(s, req.IsActive ? "activate_user" : "deactivate_user", username, ct);
+        return Ok(new { success = true });
+    }
+
+    // DELETE /api/admin/users/{username}
+    [HttpDelete("users/{username}")]
+    public async Task<IActionResult> DeleteUser(string username, CancellationToken ct)
+    {
+        var s = CurrentSession();
+        if (s is null) return Unauthorized();
+        if (s.Role != "superadmin") return StatusCode(403, new { error = "Superadmin only." });
+        if (s.Username.Equals(username, StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { error = "Cannot delete your own account." });
+
+        var user = await _db.AdminUsers.FirstOrDefaultAsync(u => u.Username == username, ct);
+        if (user is null) return NotFound();
+
+        _db.AdminUsers.Remove(user);
+        await _db.SaveChangesAsync(ct);
+        _auth.RevokeAllForUser(username);
+        await LogAsync(s, "delete_user", username, ct);
+        return Ok(new { success = true });
+    }
 }
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
-public sealed class AdminLoginRequest  { public string? Username { get; set; } public string? Password { get; set; } }
-public sealed class AdminUserConfig    { public string Username { get; set; } = ""; public string Password { get; set; } = ""; public string Name { get; set; } = ""; public string Role { get; set; } = "admin"; }
+public sealed class AdminLoginRequest    { public string? Username { get; set; } public string? Password { get; set; } }
+public sealed class AdminUserConfig      { public string Username { get; set; } = ""; public string Password { get; set; } = ""; public string Name { get; set; } = ""; public string Role { get; set; } = "admin"; }
 public sealed class UpdateProfileRequest { public string? DisplayName { get; set; } public string? Bio { get; set; } }
 public sealed class UploadAvatarRequest  { public string? Base64 { get; set; } public string? MimeType { get; set; } }
+public sealed class CreateUserRequest    { public string? Username { get; set; } public string? Password { get; set; } public string? Name { get; set; } public string? Role { get; set; } }
+public sealed class ChangePasswordRequest { public string? NewPassword { get; set; } }
+public sealed class ChangeRoleRequest    { public string Role { get; set; } = "admin"; }
+public sealed class ToggleStatusRequest  { public bool IsActive { get; set; } }
+
+// ── Password helper ───────────────────────────────────────────────────────────
+public static class AdminUserHelper
+{
+    private const string Salt = "bca-bradford-2026";
+    public static string Hash(string password)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(password + Salt));
+        return Convert.ToHexString(bytes).ToLower();
+    }
+    public static bool Verify(string password, string hash) => Hash(password) == hash;
+}

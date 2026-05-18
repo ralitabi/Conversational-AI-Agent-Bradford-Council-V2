@@ -169,6 +169,6 @@ app.UseCors();
 app.UseRouting();
 app.MapControllers();
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow, version = "1.1.0-contact" }));
 
 app.Run();

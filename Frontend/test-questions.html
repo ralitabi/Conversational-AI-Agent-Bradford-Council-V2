@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Bradford Council AI — Test Checklist</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --blue:#005192;--blue2:#003d70;--orange:#F26C11;
+  --green:#16a34a;--red:#dc2626;--purple:#7c3aed;
+  --bg:#f0f4f8;--card:#fff;--border:#e2e8f0;
+  --text:#1e293b;--muted:#64748b;--radius:10px;
+}
+html{font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;color:var(--text);background:var(--bg)}
+
+/* ── TOPBAR ── */
+.topbar{
+  background:var(--blue);color:#fff;padding:0 16px;height:52px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:50;box-shadow:0 2px 10px rgba(0,0,0,.2);
+  gap:12px;
+}
+.topbar-left{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.topbar-logo{height:28px;filter:brightness(0) invert(1);opacity:.9;flex-shrink:0}
+.topbar-title{font-size:.9rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar-sub{font-size:.68rem;opacity:.6;margin-top:1px;white-space:nowrap}
+.topbar-progress{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.progress-bar-wrap{background:rgba(255,255,255,.2);border-radius:4px;height:5px;width:120px;overflow:hidden}
+.progress-bar-fill{height:100%;background:#60d394;border-radius:4px;transition:width .4s}
+.progress-label{font-size:.72rem;opacity:.85;white-space:nowrap}
+
+/* ── TOOLBAR ── */
+.toolbar{
+  background:var(--card);border-bottom:1px solid var(--border);
+  padding:10px 16px;display:flex;flex-direction:column;gap:8px;
+  position:sticky;top:52px;z-index:40;
+}
+.toolbar-row1{display:flex;gap:8px;align-items:center}
+.toolbar-row2{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.search-box{
+  flex:1;min-width:0;
+  border:1.5px solid var(--border);border-radius:7px;
+  padding:8px 12px 8px 34px;font-size:.85rem;outline:none;
+  transition:border-color .2s;background:var(--bg);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:10px center;background-size:16px;
+}
+.search-box:focus{border-color:var(--blue)}
+.btn-sm{padding:7px 13px;border-radius:6px;border:none;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn-reset{background:#fee2e2;color:var(--red)}.btn-reset:hover{background:var(--red);color:#fff}
+.btn-export{background:#ede9fe;color:var(--purple)}.btn-export:hover{background:var(--purple);color:#fff}
+.filter-btn{
+  padding:5px 12px;border-radius:20px;border:1.5px solid var(--border);
+  background:transparent;font-size:.76rem;font-weight:600;cursor:pointer;
+  transition:all .15s;color:var(--muted);white-space:nowrap;
+}
+.filter-btn.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+.total-chip{
+  margin-left:auto;background:var(--bg);border:1px solid var(--border);border-radius:20px;
+  padding:4px 10px;font-size:.74rem;font-weight:600;color:var(--muted);white-space:nowrap;flex-shrink:0;
+}
+.total-chip span{color:var(--blue)}
+
+/* ── MAIN ── */
+.main{max-width:900px;margin:0 auto;padding:14px 12px 60px}
+
+/* ── CATEGORY CARD ── */
+.cat-card{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  margin-bottom:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05);
+}
+.cat-card.hidden{display:none}
+.cat-header{
+  display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;
+  user-select:none;transition:background .12s;border-bottom:1px solid transparent;
+}
+.cat-header:hover{background:#f8fafc}
+.cat-header.open{border-bottom-color:var(--border)}
+.cat-icon{width:32px;height:32px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.95rem}
+.cat-info{flex:1;min-width:0}
+.cat-name{font-size:.87rem;font-weight:700;color:var(--text)}
+.cat-count{font-size:.68rem;color:var(--muted);margin-top:1px}
+.cat-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.cat-prog-bar{width:56px;height:4px;background:#e2e8f0;border-radius:3px;overflow:hidden}
+.cat-prog-fill{height:100%;border-radius:3px;transition:width .3s;background:var(--green)}
+.cat-prog-label{font-size:.68rem;color:var(--muted);min-width:32px;text-align:right;white-space:nowrap}
+.cat-actions{display:flex;gap:4px}
+.btn-mark-all{font-size:.65rem;font-weight:600;padding:3px 8px;border-radius:10px;border:none;cursor:pointer;transition:all .15s}
+.btn-mark-all.mark{background:#dcfce7;color:#15803d}.btn-mark-all.mark:hover{background:#16a34a;color:#fff}
+.btn-mark-all.unmark{background:#fee2e2;color:var(--red)}.btn-mark-all.unmark:hover{background:var(--red);color:#fff}
+.cat-chevron{transition:transform .2s;color:var(--muted);flex-shrink:0}
+.cat-header.open .cat-chevron{transform:rotate(180deg)}
+
+/* ── QUESTIONS ── */
+.cat-body{padding:4px 0 6px}
+.q-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:8px 14px;cursor:pointer;transition:background .1s;
+  border-radius:6px;margin:1px 6px;
+}
+.q-item:hover{background:#f8fafc}
+.q-item.tested{background:#f0fdf4}
+.q-item.tested:hover{background:#dcfce7}
+.q-item.hidden{display:none}
+.q-check{
+  width:18px;height:18px;border-radius:5px;border:2px solid #cbd5e1;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;margin-top:2px;transition:all .15s;background:#fff;
+}
+.q-item.tested .q-check{background:var(--green);border-color:var(--green)}
+.q-check svg{display:none}
+.q-item.tested .q-check svg{display:block}
+.q-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.q-text{font-size:.83rem;line-height:1.5;color:var(--text)}
+.q-item.tested .q-text{color:var(--muted);text-decoration:line-through;text-decoration-color:#94a3b8}
+.q-tags{display:flex;gap:3px;flex-wrap:wrap}
+.q-tag{font-size:.62rem;font-weight:600;padding:1px 6px;border-radius:8px;white-space:nowrap}
+.tag-tool{background:#dbeafe;color:#1d4ed8}
+.tag-rag{background:#ede9fe;color:#6d28d9}
+.tag-key{background:#ffedd5;color:#c2410c}
+.tag-edge{background:#fce7f3;color:#9d174d}
+
+/* ── EMPTY ── */
+.empty-state{text-align:center;padding:48px 20px;color:var(--muted)}
+.empty-state p{font-size:.88rem;margin-top:10px}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(8px);
+  background:#1e293b;color:#fff;padding:9px 18px;
+  border-radius:8px;font-size:.82rem;font-weight:500;
+  opacity:0;transition:all .25s;pointer-events:none;z-index:999;white-space:nowrap;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── DESKTOP ADJUSTMENTS ── */
+@media(min-width:600px){
+  .topbar{padding:0 24px;height:56px}
+  .topbar-title{font-size:1rem}
+  .progress-bar-wrap{width:160px}
+  .toolbar{padding:10px 20px;flex-direction:row;align-items:center;gap:10px;flex-wrap:wrap}
+  .toolbar-row1{flex:1}
+  .toolbar-row2{margin:0}
+  .main{padding:20px 24px 60px}
+  .cat-header{padding:13px 18px;gap:12px}
+  .cat-icon{width:34px;height:34px}
+  .cat-name{font-size:.9rem}
+  .cat-prog-bar{width:70px}
+  .q-item{padding:9px 18px;gap:12px}
+  .q-main{flex-direction:row;align-items:flex-start}
+  .q-tags{margin-left:auto;flex-direction:row;flex-wrap:nowrap;padding-left:8px}
+}
+@media(min-width:860px){
+  .toolbar{flex-wrap:nowrap}
+}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <img src="https://www.bradford.gov.uk/css/2025/images/crest.svg" alt="" class="topbar-logo" onerror="this.style.display='none'"/>
+    <div>
+      <div class="topbar-title">AI Test Checklist</div>
+      <div class="topbar-sub">Bradford Council — QA</div>
+    </div>
+  </div>
+  <div class="topbar-progress">
+    <div class="progress-label" id="overall-label">0%</div>
+    <div class="progress-bar-wrap"><div class="progress-bar-fill" id="overall-bar" style="width:0%"></div></div>
+  </div>
+</div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <div class="toolbar-row1">
+    <input type="search" class="search-box" id="search-box" placeholder="Search questions…" oninput="filterAll()"/>
+    <button class="btn-sm btn-export" onclick="exportResults()">Export</button>
+    <button class="btn-sm btn-reset"  onclick="resetAll()">Reset</button>
+  </div>
+  <div class="toolbar-row2">
+    <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+    <button class="filter-btn"        onclick="setFilter('untested',this)">Untested</button>
+    <button class="filter-btn"        onclick="setFilter('tested',this)">✓ Tested</button>
+    <button class="filter-btn"        onclick="setFilter('key',this)">⚡ Key</button>
+    <div class="total-chip"><span id="chip-done">0</span>/<span id="chip-total">0</span></div>
+  </div>
+</div>
+
+<div class="main" id="main"></div>
+<div class="empty-state" id="empty-state" style="display:none">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+  <p>No questions match your search.</p>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const CATEGORIES = [
+  {id:'council-tax',name:'Council Tax',icon:'💷',color:'#dbeafe',ic:'#1d4ed8',questions:[
+    {q:'What is my council tax band for BD5 8LT?',t:['tool','key']},
+    {q:'What is the council tax band for BD1 1AA?',t:['tool']},
+    {q:'Check council tax band for BD7 3AB',t:['tool']},
+    {q:'Check council tax band for BD16 1AE',t:['tool']},
+    {q:'I live at 15 Oak Road BD5 8LT — what is my band and annual charge?',t:['tool','key']},
+    {q:'How much is council tax for a Band D property?',t:['tool']},
+    {q:'How do I pay my council tax?',t:['rag','key']},
+    {q:'Can I set up a direct debit for council tax?',t:['rag']},
+    {q:'What payment dates can I choose for council tax direct debit?',t:['rag']},
+    {q:'Can I pay council tax by bank transfer?',t:['rag']},
+    {q:'Can I pay council tax at a PayPoint shop?',t:['rag']},
+    {q:'Can I spread my council tax over 12 months instead of 10?',t:['rag']},
+    {q:'I live alone — can I get a 25% single person discount?',t:['rag','key']},
+    {q:'I am a full-time student. Do I pay council tax?',t:['rag','key']},
+    {q:'All adults in my house are students — are we exempt?',t:['rag']},
+    {q:'I have a severely mentally impaired adult in my home — is there a discount?',t:['rag']},
+    {q:'I\'m a carer living with the person I care for — do I get a discount?',t:['rag']},
+    {q:'My property has been adapted for a disabled person — can I get a lower band?',t:['rag']},
+    {q:'Can I get a council tax reduction if I\'m on a low income?',t:['rag','key']},
+    {q:'What are all the council tax exemptions available?',t:['rag']},
+    {q:'I can\'t afford to pay my council tax — what can I do?',t:['rag','key']},
+    {q:'I\'ve received a final notice for council tax — what happens next?',t:['rag']},
+    {q:'Council tax bailiffs have contacted me — what are my rights?',t:['rag']},
+    {q:'My council tax bill seems wrong — how do I appeal it?',t:['rag']},
+    {q:'How do I challenge my council tax band valuation?',t:['rag']},
+    {q:'I\'ve moved house — how do I update my council tax?',t:['rag','key']},
+    {q:'Someone died in my household — how does that affect my council tax?',t:['rag']},
+    {q:'My property is empty — do I still pay full council tax?',t:['rag']},
+    {q:'I own a second home in Bradford — what council tax do I pay?',t:['rag']},
+    {q:'I\'m a landlord — who pays council tax on my rental?',t:['rag']},
+    {q:'What is council tax and what does it fund?',t:['rag']},
+    {q:'What is the 2025/2026 council tax rate for Bradford?',t:['rag']},
+  ]},
+  {id:'bins',name:'Bins & Recycling',icon:'🗑️',color:'#dcfce7',ic:'#15803d',questions:[
+    {q:'When is my bin collected at BD7 3AB?',t:['tool','key']},
+    {q:'What day is my bin collected at 5 High Street BD5 8LT?',t:['tool','key']},
+    {q:'What are the bin collection days for BD9 4UA?',t:['tool']},
+    {q:'Look up bin collection for BD16',t:['tool']},
+    {q:'What goes in the grey bin?',t:['rag','key']},
+    {q:'What can I put in my green recycling bin?',t:['rag','key']},
+    {q:'Can I put nappies in my grey bin?',t:['rag']},
+    {q:'Can I put broken glass in the green recycling bin?',t:['rag']},
+    {q:'What goes in the brown garden waste bin?',t:['rag']},
+    {q:'Can I put food waste in my grey bin?',t:['rag']},
+    {q:'My bin wasn\'t collected — how do I report a missed collection?',t:['rag','key']},
+    {q:'My bin collection didn\'t happen because of snow — when will it resume?',t:['rag']},
+    {q:'My recycling bin is damaged — how do I get a replacement?',t:['rag']},
+    {q:'How do I subscribe to the brown bin garden waste service?',t:['rag','key']},
+    {q:'How much does the garden waste subscription cost?',t:['rag']},
+    {q:'How do I get rid of a large sofa or mattress?',t:['rag','key']},
+    {q:'What is a bulky waste collection and how do I book one?',t:['rag']},
+    {q:'Where is my nearest recycling centre (tip)?',t:['rag','key']},
+    {q:'Can I recycle electrical items like TVs and fridges?',t:['rag']},
+    {q:'How do I dispose of old paint or hazardous chemicals?',t:['rag']},
+    {q:'How do I dispose of needles or sharps safely?',t:['rag','key']},
+    {q:'What food waste collections are available in Bradford?',t:['rag']},
+    {q:'I need help getting my bin to the kerb — is there an assisted collection?',t:['rag']},
+    {q:'Can I report fly-tipping to Bradford Council?',t:['rag','key']},
+  ]},
+  {id:'housing',name:'Housing',icon:'🏠',color:'#ffedd5',ic:'#c2410c',questions:[
+    {q:'I\'m homeless tonight — where can I get emergency help?',t:['rag','key']},
+    {q:'I\'m at risk of losing my home — what help is available?',t:['rag','key']},
+    {q:'I\'m being evicted — what are my rights?',t:['rag','key']},
+    {q:'I\'m fleeing domestic abuse and need somewhere to stay',t:['rag','key']},
+    {q:'I\'m behind on my mortgage — what help is available?',t:['rag']},
+    {q:'I\'m sleeping rough — who do I contact?',t:['rag','key']},
+    {q:'How do I apply for social housing in Bradford?',t:['rag','key']},
+    {q:'Show me available houses to rent in Bradford',t:['tool','key']},
+    {q:'Find available 3-bedroom properties near BD3',t:['tool']},
+    {q:'Find available flats near Keighley',t:['tool']},
+    {q:'How does the Bradford housing register work?',t:['rag']},
+    {q:'My landlord won\'t fix a damp and mould problem — what can I do?',t:['rag','key']},
+    {q:'I need a stairlift — can Bradford Council help fund it?',t:['rag','key']},
+    {q:'What is the Disabled Facilities Grant?',t:['rag','key']},
+    {q:'Can I get a home improvement grant in Bradford?',t:['rag']},
+    {q:'My landlord won\'t repair a broken boiler — who do I contact?',t:['rag']},
+    {q:'I\'m a landlord — what are my legal obligations?',t:['rag','key']},
+    {q:'What is an HMO licence and do I need one?',t:['rag']},
+    {q:'There is a long-term empty property on my street — can the council act?',t:['rag']},
+    {q:'How do I complain about Incommunities housing?',t:['rag']},
+    {q:'What is supported housing and how do I apply?',t:['rag']},
+  ]},
+  {id:'benefits',name:'Benefits & Financial Support',icon:'💰',color:'#fce7f3',ic:'#be185d',questions:[
+    {q:'How do I apply for Housing Benefit in Bradford?',t:['rag','key']},
+    {q:'What is Council Tax Reduction and can I get it?',t:['rag','key']},
+    {q:'I\'ve been told to claim Universal Credit — how does that affect my Bradford benefits?',t:['rag','key']},
+    {q:'How do I apply for Free School Meals for my child?',t:['rag','key']},
+    {q:'I\'m in a crisis and need emergency money today — what help is there?',t:['rag','key']},
+    {q:'What is the Bradford Crisis and Resilience Fund?',t:['rag']},
+    {q:'Where is my nearest food bank in Bradford?',t:['rag','key']},
+    {q:'What is a Discretionary Housing Payment (DHP)?',t:['rag']},
+    {q:'I\'m struggling to pay my rent — can I get help with the shortfall?',t:['rag']},
+    {q:'What is the Assisted Purchase Scheme for household items?',t:['rag']},
+    {q:'I\'ve been overpaid Housing Benefit — what do I do?',t:['rag']},
+    {q:'How do I appeal a benefit decision I disagree with?',t:['rag']},
+    {q:'I\'ve had a change of circumstances — who do I need to tell?',t:['rag','key']},
+    {q:'When will my Housing Benefit payment arrive?',t:['rag']},
+    {q:'What documents do I need to apply for Housing Benefit?',t:['rag']},
+    {q:'I\'m a landlord — can my tenant\'s benefit be paid directly to me?',t:['rag']},
+    {q:'What cost of living help is Bradford Council providing?',t:['rag']},
+    {q:'How do I manage my benefits online with MyInfo?',t:['rag']},
+    {q:'How do I backdate a benefit claim?',t:['rag']},
+  ]},
+  {id:'schools',name:'Schools & Education',icon:'🎓',color:'#ede9fe',ic:'#6d28d9',questions:[
+    {q:'Find primary schools near BD5',t:['tool','key']},
+    {q:'Find secondary schools near BD8 7JE',t:['tool','key']},
+    {q:'Which is the best primary school near BD4?',t:['tool']},
+    {q:'Find schools near Keighley BD21',t:['tool']},
+    {q:'Tell me about Thornton Primary School',t:['tool','key']},
+    {q:'What is Belle Vue Girls Academy\'s Ofsted rating?',t:['tool']},
+    {q:'Tell me about Dixons Kings Academy',t:['tool']},
+    {q:'Tell me about Hanson Academy Bradford',t:['tool']},
+    {q:'How do I apply for a primary school place in Bradford?',t:['rag','key']},
+    {q:'How do I apply for a secondary school place?',t:['rag','key']},
+    {q:'What is the closing date for Bradford school admissions?',t:['rag','key']},
+    {q:'How do I appeal a school admissions decision?',t:['rag']},
+    {q:'What is Bradford\'s in-year admissions process?',t:['rag']},
+    {q:'My child has special educational needs — how do I get an EHCP?',t:['rag','key']},
+    {q:'What support is available for children with SEND in Bradford?',t:['rag','key']},
+    {q:'What is Bradford\'s Local Offer for SEND?',t:['rag']},
+    {q:'Does my child qualify for free school meals?',t:['rag','key']},
+    {q:'How does free school transport work in Bradford?',t:['rag']},
+    {q:'What are the current term dates for Bradford schools?',t:['rag','key']},
+    {q:'How do I register my child for home education?',t:['rag']},
+  ]},
+  {id:'libraries',name:'Libraries',icon:'📚',color:'#cffafe',ic:'#0e7490',questions:[
+    {q:'Find my nearest library to BD6',t:['tool','key']},
+    {q:'Find libraries near BD16 1AE',t:['tool']},
+    {q:'What is the nearest library to Ilkley LS29?',t:['tool']},
+    {q:'Tell me about Bradford Central Library',t:['tool','key']},
+    {q:'What are the opening hours for Shipley Library?',t:['tool']},
+    {q:'Tell me about Keighley Library',t:['tool']},
+    {q:'Tell me about Bingley Library',t:['tool']},
+    {q:'Tell me about Idle Library',t:['tool']},
+    {q:'Tell me about Wyke Library',t:['tool']},
+    {q:'Tell me about Manningham Library',t:['tool']},
+    {q:'Tell me about Eccleshill Library',t:['tool']},
+    {q:'Tell me about Ilkley Library',t:['tool']},
+    {q:'Tell me about Otley Library',t:['tool']},
+    {q:'Tell me about Haworth Library',t:['tool']},
+    {q:'Tell me about Clayton Library',t:['tool']},
+    {q:'Tell me about Great Horton Library',t:['tool']},
+    {q:'Tell me about Laisterdyke Library',t:['tool']},
+    {q:'Tell me about Oakworth Library',t:['tool']},
+    {q:'Tell me about Queensbury Library',t:['tool']},
+    {q:'Tell me about Saltaire Library',t:['tool']},
+    {q:'Tell me about Silsden Library',t:['tool']},
+    {q:'Tell me about Thornton Library',t:['tool']},
+    {q:'Tell me about Wibsey Library',t:['tool']},
+    {q:'How do I join Bradford libraries?',t:['rag','key']},
+    {q:'Is library membership free in Bradford?',t:['rag']},
+    {q:'Can I borrow e-books from Bradford Library via BorrowBox?',t:['rag','key']},
+    {q:'Does Bradford Central Library have public computers and free Wi-Fi?',t:['rag']},
+    {q:'Can I print documents at a Bradford library?',t:['rag']},
+    {q:'Can I reserve a book at a Bradford library?',t:['rag']},
+  ]},
+  {id:'planning',name:'Planning & Building Control',icon:'🏗️',color:'#fef9c3',ic:'#a16207',questions:[
+    {q:'Do I need planning permission for a single-storey rear extension?',t:['rag','key']},
+    {q:'Do I need planning permission for a loft conversion?',t:['rag','key']},
+    {q:'Can I add a porch without planning permission?',t:['rag']},
+    {q:'Do I need permission to build an outbuilding in my garden?',t:['rag']},
+    {q:'Can I install solar panels without planning permission?',t:['rag']},
+    {q:'My neighbour is building an extension — do they need planning permission?',t:['rag','key']},
+    {q:'What is a Lawful Development Certificate?',t:['rag']},
+    {q:'How do I make a planning application in Bradford?',t:['rag','key']},
+    {q:'How do I view a planning application online?',t:['rag','key']},
+    {q:'How do I comment or object to a planning application?',t:['rag']},
+    {q:'How much does planning permission cost?',t:['rag','key']},
+    {q:'Can I get pre-application planning advice?',t:['rag']},
+    {q:'My planning application was refused — can I appeal?',t:['rag']},
+    {q:'What are building regulations and when do I need them?',t:['rag','key']},
+    {q:'How do I submit a building regulations full plans application?',t:['rag']},
+    {q:'How much do building regulation charges cost?',t:['rag']},
+    {q:'I did building work without approval — how do I regularise it?',t:['rag']},
+    {q:'How do I report an unauthorised development?',t:['rag','key']},
+    {q:'What is the Community Infrastructure Levy (CIL) in Bradford?',t:['rag']},
+    {q:'What is a Section 106 planning agreement?',t:['rag']},
+    {q:'How do I apply for a new street name or house number?',t:['rag']},
+    {q:'There is a dangerous structure near my property — who do I contact?',t:['rag','key']},
+    {q:'How do I apply for listed building consent?',t:['rag']},
+  ]},
+  {id:'transport',name:'Transport & Roads',icon:'🚗',color:'#e0f2fe',ic:'#0369a1',questions:[
+    {q:'How do I report a pothole in Bradford?',t:['rag','key']},
+    {q:'How do I apply for a resident parking permit?',t:['rag','key']},
+    {q:'I received a Penalty Charge Notice — how do I appeal?',t:['rag','key']},
+    {q:'How do I apply for a Blue Badge disabled parking permit?',t:['rag','key']},
+    {q:'How do I renew my Blue Badge?',t:['rag']},
+    {q:'How do I apply for a free bus pass in Bradford?',t:['rag','key']},
+    {q:'Are concessionary bus passes available for disabled people?',t:['rag']},
+    {q:'There is an abandoned car on my street — who do I report it to?',t:['rag']},
+    {q:'How do I report a broken street light?',t:['rag']},
+    {q:'How do I report a blocked drain causing flooding?',t:['rag']},
+    {q:'How does Bradford Council grit roads in winter?',t:['rag']},
+    {q:'What are the gritting routes for my area?',t:['rag']},
+    {q:'How do I apply for Bikeability cycle training for my child?',t:['rag']},
+    {q:'Where are Bradford\'s active travel hubs?',t:['rag']},
+    {q:'Is there a cycle to work scheme in Bradford?',t:['rag']},
+    {q:'What taxi and private hire licences does Bradford issue?',t:['rag']},
+  ]},
+  {id:'health',name:'Health & Wellbeing',icon:'❤️',color:'#fce7f3',ic:'#9d174d',questions:[
+    {q:'I\'m in a mental health crisis — who do I call in Bradford?',t:['rag','key']},
+    {q:'What mental health support services are available in Bradford?',t:['rag','key']},
+    {q:'I need help with alcohol dependency in Bradford',t:['rag','key']},
+    {q:'I need help with drug addiction — what services are available?',t:['rag']},
+    {q:'Where can I get sexual health services and testing in Bradford?',t:['rag','key']},
+    {q:'I want to quit smoking — what free support is available?',t:['rag']},
+    {q:'Where can I get a free NHS health check?',t:['rag']},
+    {q:'How do I get vaccinations for my child in Bradford?',t:['rag']},
+    {q:'I\'m worried about problem gambling — where can I get help?',t:['rag']},
+    {q:'How do I get weight management support in Bradford?',t:['rag']},
+    {q:'What cancer screening programmes are available?',t:['rag']},
+    {q:'What is Bradford\'s needle and syringe exchange programme?',t:['rag']},
+    {q:'What baby and child health services are available in Bradford?',t:['rag']},
+  ]},
+  {id:'sports',name:'Sports & Leisure',icon:'🏊',color:'#d1fae5',ic:'#065f46',questions:[
+    {q:'Find sports centres near BD6',t:['tool','key']},
+    {q:'Find swimming pools near BD16 1AE',t:['tool','key']},
+    {q:'Find gyms near BD7',t:['tool']},
+    {q:'Nearest leisure centre to BD21 Keighley',t:['tool']},
+    {q:'Tell me about Sedbergh Sports and Leisure Centre',t:['tool','key']},
+    {q:'Tell me about The Leisure Centre Keighley',t:['tool','key']},
+    {q:'Tell me about Shipley Pool and Gym',t:['tool','key']},
+    {q:'Tell me about Eccleshill Pool',t:['tool']},
+    {q:'Tell me about Bowling Pool and Gym',t:['tool']},
+    {q:'Tell me about Ilkley Pool and Lido',t:['tool']},
+    {q:'Tell me about Manningham Sports Centre',t:['tool']},
+    {q:'Tell me about Marley Activities and Coaching Centre',t:['tool']},
+    {q:'Tell me about Thornton Recreation Centre',t:['tool']},
+    {q:'Tell me about Wyke Community Sports Village',t:['tool']},
+    {q:'Tell me about Squire Lane Sports and Leisure Centre',t:['tool']},
+    {q:'What is the Bradford Leisure Card?',t:['rag','key']},
+    {q:'Do armed forces get free gym access at Bradford leisure centres?',t:['rag']},
+    {q:'Is there accessible and inclusive fitness for disabled users?',t:['rag']},
+    {q:'What is Clubactive membership?',t:['rag']},
+    {q:'How do I book swimming lessons for my child in Bradford?',t:['rag','key']},
+    {q:'What fitness classes are available at Bradford leisure centres?',t:['rag','key']},
+    {q:'Are there aqua fitness classes like Aqua Blast or Aquacise?',t:['rag']},
+    {q:'What outdoor adventure activities are available in Bradford district?',t:['rag']},
+    {q:'What is Doe Park water activities centre?',t:['rag']},
+    {q:'What is Buckden House outdoor residential centre?',t:['rag']},
+    {q:'Are there self-guided walking routes in Bradford?',t:['rag']},
+    {q:'Tell me about the Airedale walking route',t:['rag']},
+    {q:'What activities are available for over 50s in Bradford?',t:['rag','key']},
+    {q:'What is Ride Bradford 2026?',t:['rag']},
+    {q:'How do I book sports activities online?',t:['rag']},
+  ]},
+  {id:'social-care',name:'Adult Social Care',icon:'🤝',color:'#fef3c7',ic:'#92400e',questions:[
+    {q:'I need help staying in my own home — what care services are available?',t:['rag','key']},
+    {q:'How do I request a care needs assessment from Bradford Council?',t:['rag','key']},
+    {q:'How much will I have to pay for home care in Bradford?',t:['rag','key']},
+    {q:'What is a financial assessment for care?',t:['rag']},
+    {q:'I\'m a carer — what support can I get from Bradford Council?',t:['rag','key']},
+    {q:'How do I arrange respite care for someone I care for?',t:['rag']},
+    {q:'I\'m worried that an older person is being abused — who do I contact?',t:['rag','key']},
+    {q:'How do I report a safeguarding concern about a vulnerable adult?',t:['rag','key']},
+    {q:'Can I manage my own care with a direct payment?',t:['rag']},
+    {q:'What is an occupational therapy assessment?',t:['rag']},
+    {q:'What supported living options are available in Bradford?',t:['rag']},
+    {q:'What mental health social work services does Bradford offer?',t:['rag']},
+    {q:'How do I arrange a care home placement?',t:['rag']},
+  ]},
+  {id:'children',name:'Children & Families',icon:'👨‍👩‍👧',color:'#fdf4ff',ic:'#7e22ce',questions:[
+    {q:'I\'m worried about a child\'s safety — who do I contact?',t:['rag','key']},
+    {q:'A child is in immediate danger — what do I do?',t:['rag','key']},
+    {q:'What family support services does Bradford Council offer?',t:['rag']},
+    {q:'What is a Family Hub and where are they in Bradford?',t:['rag','key']},
+    {q:'I want to become a foster carer — how do I apply?',t:['rag','key']},
+    {q:'What support do foster carers get in Bradford?',t:['rag']},
+    {q:'How do I find a registered childminder in Bradford?',t:['rag','key']},
+    {q:'My child has special educational needs — what SEND support is available?',t:['rag','key']},
+    {q:'How do I request an EHCP for my child?',t:['rag','key']},
+    {q:'What Holiday Activities and Food (HAF) programmes are available?',t:['rag']},
+    {q:'What early years childcare and support is available in Bradford?',t:['rag']},
+  ]},
+  {id:'environment',name:'Environment & Conservation',icon:'🌿',color:'#dcfce7',ic:'#166534',questions:[
+    {q:'My neighbour\'s dog keeps barking — who do I contact?',t:['rag','key']},
+    {q:'There is dog fouling on my street — how do I report it?',t:['rag']},
+    {q:'I found a stray dog — who do I call?',t:['rag','key']},
+    {q:'A footpath near me is blocked — who do I report it to?',t:['rag','key']},
+    {q:'How do I find out if there\'s a public right of way near me?',t:['rag']},
+    {q:'Is my house in a conservation area in Bradford?',t:['rag']},
+    {q:'How do I apply to alter a listed building?',t:['rag']},
+    {q:'What support is available for biodiversity on my land?',t:['rag']},
+    {q:'What is Bradford Council doing about climate change?',t:['rag']},
+    {q:'Tell me about the Saltaire World Heritage Site',t:['rag','key']},
+    {q:'What is Bradford\'s Heritage Action Zone?',t:['rag']},
+    {q:'What are the registered parks and open spaces in Bradford?',t:['rag']},
+  ]},
+  {id:'community',name:'Community Support',icon:'🏘️',color:'#e0e7ff',ic:'#3730a3',questions:[
+    {q:'How do I apply for an allotment in Bradford?',t:['rag','key']},
+    {q:'What is the allotment waiting list situation in Bradford?',t:['rag']},
+    {q:'I am experiencing domestic abuse — what help is available?',t:['rag','key']},
+    {q:'What is the DASV Bradford helpline number?',t:['rag','key']},
+    {q:'How do I apply for a community grant in Bradford?',t:['rag','key']},
+    {q:'What is the Bradford Community Chest grant?',t:['rag']},
+    {q:'What support does Bradford offer to armed forces veterans?',t:['rag']},
+    {q:'I am an asylum seeker — what support is available in Bradford?',t:['rag','key']},
+    {q:'Is Bradford a City of Sanctuary?',t:['rag']},
+    {q:'What support is available for newly arrived refugees in Bradford?',t:['rag']},
+  ]},
+  {id:'clean-air',name:'Clean Air Zone',icon:'💨',color:'#e0f2fe',ic:'#0369a1',questions:[
+    {q:'Does my car need to pay the Bradford Clean Air Zone charge?',t:['rag','key']},
+    {q:'How much is the daily Bradford CAZ charge?',t:['rag','key']},
+    {q:'How do I pay the Bradford Clean Air Zone charge?',t:['rag','key']},
+    {q:'My vehicle is exempt from the CAZ — how do I register the exemption?',t:['rag']},
+    {q:'Are electric vehicles exempt from the Bradford CAZ?',t:['rag']},
+    {q:'Does the Bradford CAZ apply to motorbikes?',t:['rag']},
+    {q:'Does the Bradford CAZ apply to vans and HGVs?',t:['rag']},
+    {q:'I received a CAZ Penalty Charge Notice — how do I appeal it?',t:['rag','key']},
+    {q:'Are there grants to help me upgrade my vehicle for the Bradford CAZ?',t:['rag']},
+    {q:'I\'m visiting Bradford — will I need to pay the Clean Air Zone?',t:['rag']},
+  ]},
+  {id:'business-rates',name:'Business Rates',icon:'📊',color:'#f0fdf4',ic:'#15803d',questions:[
+    {q:'How do I pay my business rates in Bradford?',t:['rag','key']},
+    {q:'What business rate reliefs are available for small businesses?',t:['rag','key']},
+    {q:'Do I qualify for Small Business Rate Relief?',t:['rag']},
+    {q:'What is Mandatory Rate Relief for charities?',t:['rag']},
+    {q:'Are there Empty Property Rate Relief options?',t:['rag']},
+    {q:'How do I appeal my business rateable value?',t:['rag']},
+    {q:'How do I find out my business\'s rateable value?',t:['rag']},
+    {q:'How do I contact the Bradford business rates team?',t:['rag']},
+  ]},
+  {id:'business-support',name:'Business Support',icon:'💼',color:'#ecfdf5',ic:'#065f46',questions:[
+    {q:'What business support grants are available in Bradford?',t:['rag','key']},
+    {q:'How do I get business advice and support in Bradford?',t:['rag']},
+    {q:'How do I find commercial premises to rent in Bradford?',t:['rag','key']},
+    {q:'Does Bradford Council have commercial properties to let or sell?',t:['rag']},
+    {q:'How do I rent property from Bradford Council as a business?',t:['rag']},
+    {q:'What business training courses does Bradford Council offer?',t:['rag']},
+    {q:'What are the fire safety responsibilities for business owners?',t:['rag','key']},
+    {q:'What health and safety responsibilities do employers have?',t:['rag','key']},
+    {q:'How do I report a workplace accident (RIDDOR)?',t:['rag']},
+    {q:'How does Bradford Council procurement and tendering work?',t:['rag','key']},
+    {q:'How do I become a supplier to Bradford Council?',t:['rag']},
+    {q:'What is the YORtender portal for Bradford contracts?',t:['rag']},
+    {q:'What is the Bradford District Economic Strategy?',t:['rag']},
+    {q:'How do I invest in Bradford or set up a business here?',t:['rag']},
+    {q:'What is a compulsory purchase order and when does Bradford use them?',t:['rag']},
+  ]},
+  {id:'licensing',name:'Licensing',icon:'📋',color:'#fffbeb',ic:'#b45309',questions:[
+    {q:'How do I apply for a taxi (Hackney carriage) licence in Bradford?',t:['rag','key']},
+    {q:'How do I apply for a private hire vehicle licence?',t:['rag']},
+    {q:'How do I register a food business with Bradford Council?',t:['rag','key']},
+    {q:'I want to open a restaurant — what food hygiene registration do I need?',t:['rag']},
+    {q:'How do I apply for a premises licence to sell alcohol?',t:['rag','key']},
+    {q:'How do I get a Temporary Event Notice (TEN)?',t:['rag']},
+    {q:'What gambling licences does Bradford Council issue?',t:['rag']},
+    {q:'How do I apply for a street trading licence?',t:['rag']},
+    {q:'I want to open a tattoo studio — what licences do I need?',t:['rag']},
+    {q:'How do I apply for an animal boarding licence?',t:['rag']},
+    {q:'How do I apply for a busking licence in Bradford?',t:['rag']},
+    {q:'How do I apply for an outdoor seating licence for my café?',t:['rag']},
+  ]},
+  {id:'elections',name:'Elections & Democracy',icon:'🗳️',color:'#ede9fe',ic:'#5b21b6',questions:[
+    {q:'How do I register to vote in Bradford?',t:['rag','key']},
+    {q:'Am I already on the electoral register?',t:['rag']},
+    {q:'How do I apply for a postal vote?',t:['rag','key']},
+    {q:'What photo ID do I need to vote at a polling station?',t:['rag','key']},
+    {q:'I don\'t have valid photo ID — how do I get a free Voter Authority Certificate?',t:['rag']},
+    {q:'Where is my polling station in Bradford?',t:['rag']},
+    {q:'How do I apply for a proxy vote?',t:['rag']},
+    {q:'How do I stand as a candidate in local Bradford elections?',t:['rag']},
+    {q:'Where can I find the results of the last Bradford local elections?',t:['rag']},
+    {q:'How do I find out which ward I live in?',t:['rag']},
+  ]},
+  {id:'births',name:'Births, Deaths & Marriages',icon:'💍',color:'#fce7f3',ic:'#be185d',questions:[
+    {q:'How do I register a birth in Bradford?',t:['rag','key']},
+    {q:'How many days do I have to register a birth?',t:['rag','key']},
+    {q:'I need to register a stillbirth — what is the process?',t:['rag']},
+    {q:'How do I change my child\'s name after birth?',t:['rag']},
+    {q:'What is a naming ceremony at Bradford Register Office?',t:['rag']},
+    {q:'How do I register a death in Bradford?',t:['rag','key']},
+    {q:'How long do I have to register a death?',t:['rag','key']},
+    {q:'How do I arrange a burial in Bradford?',t:['rag']},
+    {q:'How do I arrange a cremation in Bradford?',t:['rag']},
+    {q:'Which crematoria does Bradford operate?',t:['rag']},
+    {q:'How do I refer a death to the Bradford coroner?',t:['rag']},
+    {q:'What does Bradford\'s Coroner\'s Office do?',t:['rag']},
+    {q:'How do I get married at Bradford Register Office?',t:['rag','key']},
+    {q:'How far in advance do I need to give notice of marriage?',t:['rag','key']},
+    {q:'What is an urgent marriage licence?',t:['rag']},
+    {q:'How do I form a civil partnership in Bradford?',t:['rag']},
+    {q:'Can I renew my wedding vows through Bradford Council?',t:['rag']},
+    {q:'What are Bradford\'s approved premises for weddings?',t:['rag']},
+    {q:'How do I order a copy birth certificate?',t:['rag','key']},
+    {q:'How do I get a copy death or marriage certificate?',t:['rag']},
+    {q:'What is a citizenship ceremony in Bradford?',t:['rag','key']},
+    {q:'What are Bradford Register Office\'s fees?',t:['rag']},
+  ]},
+  {id:'emergencies',name:'Emergencies & Disruptions',icon:'🚨',color:'#fee2e2',ic:'#dc2626',questions:[
+    {q:'My house is flooding right now — what do I do?',t:['rag','key']},
+    {q:'How do I check for flood warnings near my home?',t:['rag','key']},
+    {q:'How do I create a flood pack / emergency kit?',t:['rag']},
+    {q:'How do I protect my property from flooding?',t:['rag']},
+    {q:'What should I do if my area is at risk of flooding?',t:['rag']},
+    {q:'Are there flood grants available in Bradford?',t:['rag']},
+    {q:'What is the Environment Agency Floodline number?',t:['rag']},
+    {q:'How do I prepare for an emergency in Bradford?',t:['rag','key']},
+    {q:'How do I plan a safe public event in Bradford?',t:['rag']},
+    {q:'What is the Safety Advisory Group (SAG) process for events?',t:['rag']},
+    {q:'Is Bradford Council open on bank holidays?',t:['rag','key']},
+    {q:'What are Bradford Council\'s Christmas opening hours?',t:['rag']},
+    {q:'What is Bradford Council\'s emergency 24/7 phone number?',t:['rag','key']},
+  ]},
+  {id:'regeneration',name:'Regeneration & Investment',icon:'🔨',color:'#ecfdf5',ic:'#065f46',questions:[
+    {q:'What is the Keighley Towns Fund?',t:['rag','key']},
+    {q:'How much money is in the Keighley Towns Fund?',t:['rag']},
+    {q:'What regeneration projects are funded by the Keighley Towns Fund?',t:['rag']},
+    {q:'How do I apply for a Keighley community grant?',t:['rag','key']},
+    {q:'What is the Shipley Towns Fund?',t:['rag','key']},
+    {q:'What regeneration projects are happening in Shipley?',t:['rag']},
+    {q:'What major investments are planned for Bradford city centre?',t:['rag']},
+  ]},
+  {id:'foi',name:'Open Data, FOI & Data Protection',icon:'📂',color:'#f0f9ff',ic:'#0369a1',questions:[
+    {q:'How do I make a Freedom of Information (FOI) request to Bradford Council?',t:['rag','key']},
+    {q:'How long does Bradford Council have to respond to an FOI request?',t:['rag']},
+    {q:'What are Environmental Information Regulations (EIR)?',t:['rag']},
+    {q:'How do I make a Subject Access Request (SAR) under GDPR?',t:['rag','key']},
+    {q:'How do I request CCTV footage from Bradford Council?',t:['rag','key']},
+    {q:'How do I opt out of my NHS data being shared?',t:['rag']},
+    {q:'What is Bradford Council\'s data protection policy?',t:['rag']},
+    {q:'What is Bradford\'s right to erasure process?',t:['rag']},
+    {q:'Where can I find Bradford Council\'s open datasets?',t:['rag']},
+    {q:'How do I access Bradford\'s district maps and GIS data?',t:['rag']},
+  ]},
+  {id:'your-council',name:'Your Council & Governance',icon:'⚖️',color:'#f1f5f9',ic:'#334155',questions:[
+    {q:'How does Bradford Council work?',t:['rag','key']},
+    {q:'Which political party controls Bradford Council?',t:['rag']},
+    {q:'Who is Bradford Council\'s chief executive?',t:['rag']},
+    {q:'How do I find my local councillor?',t:['rag','key']},
+    {q:'When is the next Bradford Council cabinet meeting?',t:['rag']},
+    {q:'How do I watch or attend a Bradford Council meeting?',t:['rag']},
+    {q:'How do I find the minutes from a Bradford Council meeting?',t:['rag']},
+    {q:'What is Bradford\'s Best Value Notice and Improvement Panel?',t:['rag']},
+    {q:'How do I start an ePetition with Bradford Council?',t:['rag']},
+    {q:'How do I report fraud to Bradford Council?',t:['rag','key']},
+    {q:'How do I report benefit fraud in Bradford?',t:['rag','key']},
+    {q:'What is Bradford Council\'s whistleblowing policy?',t:['rag']},
+    {q:'What are Bradford Council\'s fees and charges for this year?',t:['rag']},
+    {q:'How do I invite the Lord Mayor to an event?',t:['rag']},
+    {q:'What is Bradford City Hall and can I hire it?',t:['rag']},
+    {q:'What is the Bradford District Partnership?',t:['rag']},
+    {q:'How does the overview and scrutiny committee work?',t:['rag']},
+    {q:'How do I find Bradford Council\'s budget and spending information?',t:['rag']},
+  ]},
+  {id:'understanding',name:'Understanding Bradford',icon:'📈',color:'#fafaf9',ic:'#44403c',questions:[
+    {q:'What is the total population of the Bradford district?',t:['rag','key']},
+    {q:'What are the main ethnic groups in Bradford?',t:['rag']},
+    {q:'What are the main religions in Bradford?',t:['rag']},
+    {q:'What is Bradford\'s unemployment rate?',t:['rag']},
+    {q:'What is the average life expectancy in Bradford?',t:['rag']},
+    {q:'How deprived is Bradford compared to other UK cities?',t:['rag']},
+    {q:'Can I view a ward profile for Bradford East?',t:['rag','key']},
+    {q:'Can I view a constituency profile for Bradford West?',t:['rag']},
+    {q:'What is the Bradford economy worth?',t:['rag']},
+    {q:'What are Bradford\'s key health statistics?',t:['rag']},
+  ]},
+  {id:'arts',name:'Arts, Culture & Tourism',icon:'🎨',color:'#fdf4ff',ic:'#7e22ce',questions:[
+    {q:'What museums are in Bradford?',t:['rag','key']},
+    {q:'What is the National Science and Media Museum?',t:['rag']},
+    {q:'What art galleries are in Bradford?',t:['rag']},
+    {q:'Tell me about Bradford\'s City of Film designation',t:['rag','key']},
+    {q:'What was Bradford 2025 Capital of Culture?',t:['rag']},
+    {q:'How do I apply for an arts grant in Bradford?',t:['rag']},
+    {q:'What is Bradford City Park and what events happen there?',t:['rag']},
+    {q:'How do I find out what\'s on in Bradford this weekend?',t:['rag']},
+    {q:'What is the Wool Exchange in Bradford?',t:['rag']},
+  ]},
+  {id:'paying',name:'Paying for Services',icon:'💳',color:'#f0fdf4',ic:'#15803d',questions:[
+    {q:'How do I pay a Bradford Council invoice online?',t:['rag','key']},
+    {q:'I received an invoice from Bradford Council but I think it\'s wrong — how do I dispute it?',t:['rag','key']},
+    {q:'How do I request a copy of a Bradford Council invoice?',t:['rag']},
+    {q:'How do I set up a direct debit with Bradford Council?',t:['rag']},
+    {q:'How do I switch to paperless bills with Bradford Council?',t:['rag']},
+    {q:'I\'m struggling with debt — where can I get free money advice in Bradford?',t:['rag','key']},
+    {q:'What debt management help does Bradford Council offer?',t:['rag']},
+    {q:'How do I pay Bradford Council by phone?',t:['rag']},
+  ]},
+  {id:'jobs',name:'Jobs & Careers',icon:'👔',color:'#fffbeb',ic:'#92400e',questions:[
+    {q:'What jobs are currently available at Bradford Council?',t:['rag','key']},
+    {q:'How do I apply for a job at Bradford Council?',t:['rag']},
+    {q:'What apprenticeships does Bradford Council offer?',t:['rag','key']},
+    {q:'How do I apply for a Bradford Council apprenticeship?',t:['rag']},
+    {q:'Are there social work or social care jobs at Bradford Council?',t:['rag','key']},
+    {q:'Are there teaching jobs available through Bradford Council?',t:['rag']},
+    {q:'Are there teaching assistant jobs available in Bradford?',t:['rag']},
+    {q:'How do I volunteer with Bradford Council?',t:['rag','key']},
+    {q:'Does Bradford Council offer a graduate programme?',t:['rag']},
+    {q:'What career development opportunities does Bradford Council offer?',t:['rag']},
+  ]},
+  {id:'complaints',name:'Complaints & Compliments',icon:'📣',color:'#fef2f2',ic:'#dc2626',questions:[
+    {q:'How do I make a formal complaint about Bradford Council?',t:['rag','key']},
+    {q:'What is Bradford Council\'s complaints procedure?',t:['rag','key']},
+    {q:'I\'m not happy with Bradford Council\'s response to my complaint — what next?',t:['rag']},
+    {q:'How do I escalate a complaint to the Local Government Ombudsman?',t:['rag','key']},
+    {q:'How do I complain about adult social care services?',t:['rag']},
+    {q:'How do I complain about children\'s services?',t:['rag']},
+    {q:'How do I complain about housing services?',t:['rag']},
+    {q:'How do I give a compliment to Bradford Council staff?',t:['rag']},
+  ]},
+  {id:'address',name:'Address & Postcode Lookup',icon:'📍',color:'#fef9c3',ic:'#854d0e',questions:[
+    {q:'What addresses are at postcode BD5 8LT?',t:['tool','key']},
+    {q:'Look up addresses at BD7 3AB',t:['tool','key']},
+    {q:'What properties are at BD1 1NN?',t:['tool']},
+    {q:'Show me all addresses on High Street BD4',t:['tool']},
+    {q:'Look up addresses for BD16 2EQ',t:['tool']},
+    {q:'What addresses are at BD21 3SX?',t:['tool']},
+    {q:'Look up postcode BD9 4UA',t:['tool']},
+  ]},
+];
+
+// ── STATE ──────────────────────────────────────────────────────────────────
+const SK = 'bca_test_v2';
+let tested = JSON.parse(localStorage.getItem(SK)||'{}');
+let filter = 'all', search = '';
+const qId = (c,i) => `${c}__${i}`;
+const is   = id => !!tested[id];
+const mark = (id,v) => { v ? tested[id]=1 : delete tested[id]; localStorage.setItem(SK,JSON.stringify(tested)); };
+
+// ── BUILD ──────────────────────────────────────────────────────────────────
+function build() {
+  document.getElementById('main').innerHTML = CATEGORIES.map(cat => {
+    const items = cat.questions.map((q,i) => {
+      const id = qId(cat.id,i);
+      const tags = q.t.map(t=>`<span class="q-tag tag-${t}">${t}</span>`).join('');
+      return `<div class="q-item${is(id)?' tested':''}" id="qi-${id}" data-id="${id}" data-tags="${q.t.join(',')}" onclick="tog('${id}')">
+        <div class="q-check"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" width="10" height="10"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div class="q-main">
+          <div class="q-text">${esc(q.q)}</div>
+          <div class="q-tags">${tags}</div>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="cat-card" id="cat-${cat.id}">
+      <div class="cat-header" id="ch-${cat.id}" onclick="togCat('${cat.id}')">
+        <div class="cat-icon" style="background:${cat.color};color:${cat.ic}">${cat.icon}</div>
+        <div class="cat-info">
+          <div class="cat-name">${cat.name}</div>
+          <div class="cat-count" id="cc-${cat.id}">${cat.questions.length} questions</div>
+        </div>
+        <div class="cat-right">
+          <div class="cat-prog-bar"><div class="cat-prog-fill" id="cpf-${cat.id}" style="width:0%"></div></div>
+          <div class="cat-prog-label" id="cpl-${cat.id}">0/${cat.questions.length}</div>
+          <div class="cat-actions" onclick="event.stopPropagation()">
+            <button class="btn-mark-all mark"   onclick="markAll('${cat.id}',true)" title="Mark all tested">✓</button>
+            <button class="btn-mark-all unmark" onclick="markAll('${cat.id}',false)" title="Clear all">✕</button>
+          </div>
+          <svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+      </div>
+      <div class="cat-body" id="cb-${cat.id}" style="display:none">${items}</div>
+    </div>`;
+  }).join('');
+  updAll();
+}
+
+function tog(id) {
+  mark(id, !is(id));
+  document.getElementById('qi-'+id)?.classList.toggle('tested', is(id));
+  updCat(id.split('__')[0]); updOverall(); applyFilter();
+}
+function togCat(cid) {
+  const b=document.getElementById('cb-'+cid), h=document.getElementById('ch-'+cid);
+  const open=b.style.display!=='none';
+  b.style.display=open?'none':''; h.classList.toggle('open',!open);
+}
+function markAll(cid,v) {
+  const cat=CATEGORIES.find(c=>c.id===cid); if(!cat) return;
+  cat.questions.forEach((_,i)=>{ const id=qId(cid,i); mark(id,v); document.getElementById('qi-'+id)?.classList.toggle('tested',v); });
+  updCat(cid); updOverall(); applyFilter();
+  toast(v?`"${cat.name}" — all marked`:`"${cat.name}" cleared`);
+}
+function updCat(cid) {
+  const cat=CATEGORIES.find(c=>c.id===cid); if(!cat) return;
+  const tot=cat.questions.length, done=cat.questions.filter((_,i)=>is(qId(cid,i))).length;
+  const pct=tot?Math.round(done/tot*100):0;
+  const f=document.getElementById('cpf-'+cid);
+  if(f){f.style.width=pct+'%'; f.style.background=pct===100?'#16a34a':pct>0?'#60a5fa':'#e2e8f0';}
+  const l=document.getElementById('cpl-'+cid); if(l) l.textContent=`${done}/${tot}`;
+}
+function updOverall() {
+  const tot=CATEGORIES.reduce((s,c)=>s+c.questions.length,0);
+  const done=CATEGORIES.reduce((s,c)=>s+c.questions.filter((_,i)=>is(qId(c.id,i))).length,0);
+  const pct=tot?Math.round(done/tot*100):0;
+  document.getElementById('overall-label').textContent=pct+'%';
+  document.getElementById('overall-bar').style.width=pct+'%';
+  document.getElementById('chip-done').textContent=done;
+  document.getElementById('chip-total').textContent=tot;
+}
+function updAll(){ CATEGORIES.forEach(c=>updCat(c.id)); updOverall(); }
+
+// ── FILTER ─────────────────────────────────────────────────────────────────
+function setFilter(f,btn){ filter=f; document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); applyFilter(); }
+function filterAll(){ search=document.getElementById('search-box').value.toLowerCase(); applyFilter(); }
+function applyFilter() {
+  let any=false;
+  CATEGORIES.forEach(cat=>{
+    let catOk=false;
+    cat.questions.forEach((q,i)=>{
+      const id=qId(cat.id,i), el=document.getElementById('qi-'+id); if(!el) return;
+      const ms=!search||q.q.toLowerCase().includes(search);
+      const mf=filter==='all'||(filter==='tested'&&is(id))||(filter==='untested'&&!is(id))||(filter==='key'&&q.t.includes('key'));
+      const show=ms&&mf; el.classList.toggle('hidden',!show); if(show) catOk=true;
+    });
+    document.getElementById('cat-'+cat.id)?.classList.toggle('hidden',!catOk);
+    if(catOk) any=true;
+    if(search&&catOk){ document.getElementById('cb-'+cat.id).style.display=''; document.getElementById('ch-'+cat.id).classList.add('open'); }
+  });
+  document.getElementById('empty-state').style.display=any?'none':'';
+}
+
+// ── RESET & EXPORT ─────────────────────────────────────────────────────────
+function resetAll() {
+  if(!confirm('Reset all progress?')) return;
+  tested={}; localStorage.setItem(SK,'{}');
+  document.querySelectorAll('.q-item').forEach(e=>e.classList.remove('tested'));
+  updAll(); applyFilter(); toast('All progress reset');
+}
+function exportResults() {
+  const tot=CATEGORIES.reduce((s,c)=>s+c.questions.length,0);
+  const done=CATEGORIES.reduce((s,c)=>s+c.questions.filter((_,i)=>is(qId(c.id,i))).length,0);
+  const lines=['Bradford Council AI — Test Results',`Exported: ${new Date().toLocaleString('en-GB')}`,`Overall: ${done}/${tot} (${Math.round(done/tot*100)}%)`,''
+  ];
+  CATEGORIES.forEach(cat=>{
+    const d=cat.questions.filter((_,i)=>is(qId(cat.id,i))).length;
+    lines.push(`## ${cat.name} (${d}/${cat.questions.length})`);
+    cat.questions.forEach((q,i)=>lines.push(`  ${is(qId(cat.id,i))?'[✓]':'[ ]'} [${q.t.join(',')}] ${q.q}`));
+    lines.push('');
+  });
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/plain'})),download:`bca-test-${new Date().toISOString().slice(0,10)}.txt`});
+  a.click(); URL.revokeObjectURL(a.href); toast('Exported');
+}
+
+// ── UTILS ──────────────────────────────────────────────────────────────────
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+let tT; function toast(m){const e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(tT);tT=setTimeout(()=>e.classList.remove('show'),2500);}
+
+// INIT
+build();
+document.getElementById('cb-'+CATEGORIES[0].id).style.display='';
+document.getElementById('ch-'+CATEGORIES[0].id).classList.add('open');
+</script>
+</body>
+</html>

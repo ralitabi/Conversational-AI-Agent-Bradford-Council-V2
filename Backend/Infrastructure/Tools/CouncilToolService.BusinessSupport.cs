@@ -125,7 +125,7 @@ public partial class CouncilToolService
         (new[]{"procurement","tender","tendering","council contract","bid for contract","supplier",
                "supply council","become supplier","council supplier","procurement bradford",
                "contract opportunity","council procurement"},
-         new[]{"https://www.bradford.gov.uk/business/procurement/procurement/"},
+         new[]{"https://www.bradford.gov.uk/business/doing-business-with-bradford-council/procurement/"},
          "Bradford Council procurement and tendering",
          "Council contracts are advertised on the YORtender portal. Would you like to know about other business support?"),
 

@@ -282,9 +282,18 @@ public class AgentService : IAgentService
         TRIGGER: "homeless", "nowhere to sleep", "rough sleeping", "at risk of losing home", "evicted",
                  "find a home", "council house", "social housing", "housing register", "Bradford Homes",
                  "home repairs", "disabled adaptations", "DFG", "stairlift", "landlord", "tenant rights",
-                 "HMO", "empty homes", "supported housing", "damp", "disrepair", "Incommunities".
+                 "HMO", "empty homes", "supported housing", "damp", "disrepair", "Incommunities",
+                 "houses for rent", "house for rent", "houses to rent", "house to rent",
+                 "properties for rent", "property for rent", "properties to rent", "property to rent",
+                 "find a house", "find a flat", "find property", "available homes", "available properties",
+                 "rent a house", "rent a flat", "renting a home", "looking for a house",
+                 "need a house", "need somewhere to live", "affordable housing".
+
+        IMPORTANT: ANY message asking to find, search, show, or look for houses/flats/homes/properties to rent
+        → call search_bradford_homes IMMEDIATELY. Do NOT explain or redirect to estate agents.
 
         Routing table:
+        - Find / search / show houses or properties → search_bradford_homes(location="{postcode or area, or empty string}")
         - Homelessness / nowhere to sleep → get_housing_info(query="homeless tonight")
         - At risk of homelessness → get_housing_info(query="at risk of homelessness")
         - Behind on rent / mortgage → get_housing_info(query="behind on rent mortgage arrears")
@@ -575,7 +584,7 @@ public class AgentService : IAgentService
         | Health and safety at work | https://www.bradford.gov.uk/business/health-and-safety-at-work/health-and-safety-at-work/ |
         | Council properties to let/buy | https://www.bradford.gov.uk/business/properties/properties-for-sale-and-to-let/ |
         | Bradford economy | https://www.bradford.gov.uk/business/bradford-economy/bradford-economy/ |
-        | Council procurement / tendering | https://www.bradford.gov.uk/business/procurement/procurement/ |
+        | Council procurement / tendering | https://www.bradford.gov.uk/business/doing-business-with-bradford-council/procurement/ |
         | Your Bradford Council | https://www.bradford.gov.uk/your-council/ |
         | About Bradford Council | https://www.bradford.gov.uk/your-council/about-bradford-council/about-bradford-council/ |
         | Find your councillor | https://www.bradford.gov.uk/your-council/your-councillors/your-councillors/ |
@@ -606,6 +615,17 @@ public class AgentService : IAgentService
 
         **Follow-up questions:** When a tool result contains `FOLLOW_UP_SUGGESTION: {text}`,
         always end the reply with that question on its own line after the link.
+
+        ## URL SAFETY — NON-NEGOTIABLE
+        ONLY use Bradford Council URLs from these two sources:
+        1. The official link table above (exact URLs as written)
+        2. A URL that appeared verbatim inside a tool result
+
+        NEVER construct, guess, or modify a bradford.gov.uk URL.
+        If you are unsure of the exact URL for a topic not in the table and no tool was called:
+        - Use the nearest parent-section URL from the table (e.g. https://www.bradford.gov.uk/your-council/ for governance topics)
+        - OR use https://www.bradford.gov.uk/contact-us/
+        Never add extra path segments or change any part of a URL from the table.
 
         ## Rules
         - Emergencies / homelessness: **01274 431000** (24/7)

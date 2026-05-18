@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+﻿FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
 EXPOSE 8080
 # Create persistent data directory for SQLite (mount Railway volume here)
@@ -11,11 +11,15 @@ COPY ["Core/Core.csproj", "Core/"]
 COPY ["Infrastructure/Infrastructure.csproj", "Infrastructure/"]
 RUN dotnet restore "Api/Api.csproj"
 
+# Change this value to force a full cache bust on COPY + build
+ARG CACHEBUST=1779138539
+RUN echo "Cache bust: ${CACHEBUST}"
 COPY . .
 WORKDIR "/src/Api"
 RUN dotnet build -c Release -o /app/build
 
 FROM build AS publish
+ARG CACHEBUST=1779138539
 RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
 FROM base AS final

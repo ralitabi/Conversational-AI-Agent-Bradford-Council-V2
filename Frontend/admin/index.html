@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Admin Sign In — Bradford Council AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="admin.css"/>
+</head>
+<body class="login-mode">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     LOGIN SCREEN
+════════════════════════════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+
+    <div class="login-brand">
+      <div class="login-crest">
+        <img src="https://www.bradford.gov.uk/css/2025/images/crest.svg" alt="Bradford Council"
+             onerror="this.style.display='none'"/>
+      </div>
+      <div>
+        <div class="login-org">Bradford Council</div>
+        <div class="login-portal">AI Admin Portal</div>
+      </div>
+    </div>
+
+    <div class="login-divider"></div>
+
+    <h2 class="login-title">Staff Sign In</h2>
+    <p class="login-subtitle">Access restricted to authorised council staff only.</p>
+
+    <div id="login-err" class="login-err" role="alert"></div>
+
+    <form id="login-form" onsubmit="return false">
+      <div class="field">
+        <label for="login-user">Username</label>
+        <div class="input-wrap">
+          <span class="input-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          </span>
+          <input type="text" id="login-user" name="username" placeholder="council.member"
+                 autocomplete="username" autocapitalize="none" spellcheck="false"/>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="login-pass">Password</label>
+        <div class="input-wrap">
+          <span class="input-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </span>
+          <input type="password" id="login-pass" name="password" placeholder="Password"
+                 autocomplete="current-password"/>
+          <button type="button" class="pw-eye" id="pw-eye" onclick="togglePw()" aria-label="Show password">
+            <svg id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-signin" id="signin-btn" onclick="doAdminLogin()">
+        <span class="btn-text">Sign In</span>
+        <span class="btn-spinner" style="display:none">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"
+               style="animation:spin .7s linear infinite"><path d="M12 2a10 10 0 1 0 10 10" stroke-linecap="round"/></svg>
+        </span>
+      </button>
+    </form>
+
+    <p class="login-note">For access issues contact your IT administrator.</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     DASHBOARD
+════════════════════════════════════════════════════════════════ -->
+<div id="dashboard" style="display:none">
+
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <img src="https://www.bradford.gov.uk/css/2025/images/crest.svg" alt=""
+           class="sidebar-crest" onerror="this.style.display='none'"/>
+      <div>
+        <div class="sidebar-title">Admin Panel</div>
+        <div class="sidebar-sub">Bradford Council AI</div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a class="nav-item active" onclick="showView('overview')" id="nav-overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Overview
+      </a>
+      <a class="nav-item" onclick="showView('sessions')" id="nav-sessions">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Conversations
+      </a>
+      <a class="nav-item" onclick="showView('support')" id="nav-support">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.61 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        Live Support
+        <span class="nav-badge support-badge" id="support-badge">0</span>
+      </a>
+      <a class="nav-item" onclick="showView('analytics')" id="nav-analytics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><path d="M2 20h20"/></svg>
+        Analytics
+      </a>
+      <a class="nav-item superadmin-only" onclick="showView('staff')" id="nav-staff" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Staff Activity
+        <span class="nav-badge superadmin-badge">SA</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <!-- Signed-in user card — click to edit profile -->
+      <div class="user-card" onclick="openProfile()" title="Edit your profile">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info">
+          <div class="user-name" id="user-name">—</div>
+          <div class="user-role" id="user-role">—</div>
+        </div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" style="margin-left:auto;opacity:.4;flex-shrink:0"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </div>
+      <a class="nav-item" href="../index.html" target="_blank">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        Citizen Chatbot
+      </a>
+      <a class="nav-item logout" onclick="doAdminLogout()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sign Out
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main area -->
+  <main id="main">
+    <header class="topbar">
+      <button class="hamburger" id="hamburger" onclick="toggleSidebar()" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <div id="topbar-title" class="topbar-title">Overview</div>
+      <div class="topbar-right">
+        <span id="last-refresh" class="refresh-label"></span>
+        <button class="btn-refresh" onclick="refreshAll()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="14" height="14"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh
+        </button>
+      </div>
+    </header>
+
+    <!-- Overview -->
+    <div id="view-overview" class="view">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+          <div class="stat-body"><div class="stat-value" id="s-totalSessions">—</div><div class="stat-label">Total Sessions</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></div>
+          <div class="stat-body"><div class="stat-value" id="s-totalMessages">—</div><div class="stat-label">Total Messages</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <div class="stat-body"><div class="stat-value" id="s-sessionsToday">—</div><div class="stat-label">Sessions Today</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+          <div class="stat-body"><div class="stat-value" id="s-msgsToday">—</div><div class="stat-label">Messages Today</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon teal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+          <div class="stat-body"><div class="stat-value" id="s-msgsWeek">—</div><div class="stat-label">Messages This Week</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg></div>
+          <div class="stat-body"><div class="stat-value" id="s-avgMsgs">—</div><div class="stat-label">Avg Questions / Session</div></div>
+        </div>
+      </div>
+      <div class="section-title">Recent Conversations</div>
+      <div id="overview-sessions" class="table-card"><div class="loading-row">Loading…</div></div>
+    </div>
+
+    <!-- Conversations -->
+    <div id="view-sessions" class="view" style="display:none">
+      <div class="toolbar">
+        <input type="search" id="session-search" placeholder="Search by session ID or message content…"
+               oninput="searchSessions(this.value)" class="search-input"/>
+        <button class="btn-danger-outline" onclick="confirmClearAll()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          Clear All
+        </button>
+      </div>
+      <div id="sessions-table-wrap" class="table-card"><div class="loading-row">Loading…</div></div>
+      <div id="sessions-pagination" class="pagination"></div>
+    </div>
+    <!-- Live Support -->
+    <div id="view-support" class="view support-view" style="display:none">
+      <div class="support-layout">
+
+        <!-- Session list -->
+        <div class="support-list">
+          <div class="support-list-header">
+            <div class="support-list-title">Contact Sessions</div>
+            <div class="support-filter-row">
+              <button class="support-filter-btn active" onclick="setSupportFilter('all',this)">All</button>
+              <button class="support-filter-btn" onclick="setSupportFilter('waiting',this)">Waiting</button>
+              <button class="support-filter-btn" onclick="setSupportFilter('active',this)">Active</button>
+              <button class="support-filter-btn" onclick="setSupportFilter('closed',this)">Closed</button>
+            </div>
+          </div>
+          <div id="support-sessions-list" class="support-sessions-list">
+            <div class="loading-row">Loading…</div>
+          </div>
+        </div>
+
+        <!-- Chat panel -->
+        <div class="support-chat" id="support-chat">
+          <div class="support-chat-empty" id="support-chat-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <p>Select a session to start chatting</p>
+          </div>
+          <div id="support-chat-active" style="display:none">
+            <div class="support-chat-header">
+              <div class="support-chat-info">
+                <div class="support-chat-name" id="support-chat-name">—</div>
+                <div class="support-chat-subject" id="support-chat-subject"></div>
+                <div class="support-chat-meta" id="support-chat-meta"></div>
+              </div>
+              <div class="support-chat-actions">
+                <span class="support-status-badge" id="support-current-badge">waiting</span>
+                <button class="btn-close-session" id="support-close-btn" onclick="closeContactSession()">Close Session</button>
+                <button class="btn-reopen-session" id="support-reopen-btn" onclick="reopenContactSession()" style="display:none">Reopen</button>
+              </div>
+            </div>
+            <div class="support-chat-msgs" id="support-msgs"></div>
+            <div class="support-closed-bar" id="support-closed-bar" style="display:none">This session is closed. Reopen it to send messages.</div>
+            <div class="support-input-wrap">
+              <textarea id="support-input" class="support-input" rows="1"
+                placeholder="Type your reply…"
+                onkeydown="supportKey(event)" oninput="supportResize(this)"></textarea>
+              <button class="support-send-btn" id="support-send-btn" onclick="sendSupportMessage()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Analytics -->
+    <div id="view-analytics" class="view" style="display:none">
+
+      <!-- Period picker -->
+      <div class="an-toolbar">
+        <span class="an-label">Period:</span>
+        <div class="period-tabs">
+          <button class="period-btn active" onclick="setPeriod(7,this)">7 days</button>
+          <button class="period-btn" onclick="setPeriod(30,this)">30 days</button>
+          <button class="period-btn" onclick="setPeriod(90,this)">90 days</button>
+        </div>
+      </div>
+
+      <!-- Engagement summary cards -->
+      <div class="an-cards">
+        <div class="an-card">
+          <div class="an-card-label">Total Sessions</div>
+          <div class="an-card-value" id="an-total">—</div>
+        </div>
+        <div class="an-card highlight">
+          <div class="an-card-label">Engaged Sessions <span class="an-tip">3+ questions</span></div>
+          <div class="an-card-value" id="an-engaged">—</div>
+        </div>
+        <div class="an-card">
+          <div class="an-card-label">Single-Question Sessions</div>
+          <div class="an-card-value" id="an-single">—</div>
+        </div>
+        <div class="an-card">
+          <div class="an-card-label">Engagement Rate</div>
+          <div class="an-card-value" id="an-rate">—</div>
+        </div>
+      </div>
+
+      <!-- Row 1: Daily trend + Topic breakdown -->
+      <div class="an-row">
+        <div class="an-panel an-wide">
+          <div class="an-panel-header">
+            <div class="an-panel-title">Daily Message Volume</div>
+            <div class="an-panel-sub" id="trend-sub"></div>
+          </div>
+          <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
+        </div>
+        <div class="an-panel an-narrow">
+          <div class="an-panel-header">
+            <div class="an-panel-title">Top Query Topics</div>
+            <div class="an-panel-sub">by question count</div>
+          </div>
+          <div id="topics-list" class="topics-list"></div>
+        </div>
+      </div>
+
+      <!-- Row 2: Peak hours + Day of week -->
+      <div class="an-row">
+        <div class="an-panel an-half">
+          <div class="an-panel-header">
+            <div class="an-panel-title">Peak Hours</div>
+            <div class="an-panel-sub">questions by hour of day (all time)</div>
+          </div>
+          <div class="chart-wrap"><canvas id="chart-hours"></canvas></div>
+        </div>
+        <div class="an-panel an-half">
+          <div class="an-panel-header">
+            <div class="an-panel-title">Busiest Days</div>
+            <div class="an-panel-sub">questions by day of week (all time)</div>
+          </div>
+          <div class="chart-wrap"><canvas id="chart-dow"></canvas></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Staff Activity (superadmin only) -->
+    <div id="view-staff" class="view" style="display:none">
+
+      <div class="staff-banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Superadmin view — visible only to you
+      </div>
+
+      <!-- Staff performance cards -->
+      <div class="section-title" style="margin-bottom:12px">Staff Performance</div>
+      <div id="staff-cards" class="staff-cards"><div class="loading-row">Loading…</div></div>
+
+      <!-- Recent activity feed -->
+      <div class="section-title" style="margin:24px 0 12px">Recent Activity <span class="feed-sub">(last 30 days)</span></div>
+      <div class="table-card">
+        <table>
+          <thead><tr>
+            <th>Staff Member</th><th>Action</th><th>Detail</th><th>IP Address</th><th>Time</th>
+          </tr></thead>
+          <tbody id="activity-feed"><tr><td colspan="5" class="loading-row">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Detail slide-out -->
+  <div id="detail-backdrop" class="detail-backdrop" onclick="closeDetail()"></div>
+  <aside id="detail-panel" class="detail-panel">
+    <div class="detail-header">
+      <div>
+        <div class="detail-title">Conversation</div>
+        <div id="detail-sid" class="detail-sid"></div>
+      </div>
+      <div class="detail-actions">
+        <button class="btn-danger-sm" onclick="deleteCurrentSession()">Delete</button>
+        <button class="btn-icon" onclick="closeDetail()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="detail-messages" class="detail-messages"></div>
+  </aside>
+
+</div>
+
+<!-- Profile panel -->
+<div id="profile-backdrop" class="detail-backdrop" onclick="closeProfile()"></div>
+<aside id="profile-panel" class="detail-panel" style="width:420px">
+  <div class="detail-header">
+    <div>
+      <div class="detail-title">My Profile</div>
+      <div id="profile-username" class="detail-sid"></div>
+    </div>
+    <button class="btn-icon" onclick="closeProfile()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <div class="profile-body">
+    <!-- Avatar section -->
+    <div class="profile-avatar-section">
+      <div class="profile-avatar-wrap">
+        <div id="profile-avatar-display" class="profile-avatar-big"></div>
+        <div class="profile-avatar-btns">
+          <label class="btn-upload" for="avatar-file-input">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload Photo
+          </label>
+          <input type="file" id="avatar-file-input" accept="image/*" style="display:none" onchange="onAvatarSelected(event)"/>
+          <button class="btn-remove-avatar" id="remove-avatar-btn" onclick="removeAvatar()" style="display:none">Remove</button>
+        </div>
+      </div>
+      <div class="profile-avatar-hint">JPG, PNG or WebP — max 600 KB</div>
+    </div>
+
+    <!-- Fields -->
+    <div class="profile-fields">
+      <div class="field">
+        <label for="profile-display-name">Display Name</label>
+        <input type="text" id="profile-display-name" maxlength="80" placeholder="Your full name"/>
+      </div>
+      <div class="field">
+        <label for="profile-role-display">Role</label>
+        <input type="text" id="profile-role-display" disabled style="background:#f8fafc;color:var(--muted)"/>
+      </div>
+      <div class="field">
+        <label for="profile-bio">Bio <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <textarea id="profile-bio" rows="4" maxlength="300"
+          placeholder="Brief description of your role or department…"
+          style="width:100%;border:2px solid var(--border);border-radius:8px;padding:10px 14px;font-family:Inter,sans-serif;font-size:.88rem;outline:none;resize:vertical;transition:border-color .2s"></textarea>
+      </div>
+    </div>
+
+    <div id="profile-msg" style="display:none;font-size:.82rem;padding:8px 12px;border-radius:6px;margin-bottom:12px"></div>
+
+    <button class="btn-primary" onclick="saveProfile()" id="save-profile-btn">Save Changes</button>
+  </div>
+</aside>
+
+<div id="sidebar-backdrop" class="sidebar-backdrop" onclick="closeSidebar()"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

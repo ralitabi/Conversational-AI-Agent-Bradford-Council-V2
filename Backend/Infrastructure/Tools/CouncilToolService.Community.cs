@@ -6,12 +6,12 @@ public partial class CouncilToolService
     {
         (new[]{"allotment","allotments","grow your own","vegetable plot","waiting list allotment","apply allotment","allotment rent","allotment price"},
          new[]{"https://www.bradford.gov.uk/your-community/allotments/allotments/",
-               "https://www.bradford.gov.uk/your-community/allotments/apply-for-an-allotment/"},
+               "https://www.bradford.gov.uk/your-community/allotments/apply-for-an-allotment-and-view-the-allotments-waiting-list/"},
          "Allotments in Bradford",
          "Would you like to know the current waiting list situation or allotment rental costs?"),
 
         (new[]{"domestic abuse","domestic violence","DV","coercive control","abuse relationship","abusive partner","safe from abuse","refuge","DASV"},
-         new[]{"https://www.bradford.gov.uk/your-community/domestic-abuse/domestic-abuse/"},
+         new[]{"https://www.bradford.gov.uk/your-community/domestic-abuse/domestic-and-sexual-abuse/"},
          "Domestic abuse support in Bradford",
          "If you are in immediate danger, call 999. The DASV Bradford helpline is 01274 431 080 (24/7)."),
 
@@ -26,12 +26,12 @@ public partial class CouncilToolService
          "Would you like to know about other community support services in Bradford?"),
 
         (new[]{"armed forces","military","veteran","veterans","forces covenant","armed forces community","military personnel","service personnel","reservist"},
-         new[]{"https://www.bradford.gov.uk/your-community/armed-forces/armed-forces/"},
+         new[]{"https://www.bradford.gov.uk/your-community/armed-forces-community-support/armed-forces-community-support-in-bradford-district/"},
          "Armed forces community support",
          "Would you like to know about other community support services or benefits for veterans?"),
 
         (new[]{"asylum seeker","refugee","sanctuary","city of sanctuary","migrant","immigration support","new arrival Bradford"},
-         new[]{"https://www.bradford.gov.uk/your-community/asylum-seekers-and-refugees/asylum-seekers-and-refugees/"},
+         new[]{"https://www.bradford.gov.uk/your-community/asylum-seekers-and-refugees/about-refugees-and-asylum-seekers/"},
          "Support for asylum seekers and refugees",
          "Would you like to know about other community support services in Bradford?"),
 

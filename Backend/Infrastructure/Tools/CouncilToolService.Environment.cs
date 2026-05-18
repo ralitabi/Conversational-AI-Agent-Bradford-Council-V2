@@ -5,12 +5,12 @@ public partial class CouncilToolService
     private static readonly (string[] Keywords, string[] Urls, string Title, string FollowUp)[] EnvironmentKnowledgeMap =
     {
         (new[]{"dog warden","dog control","dog fouling","stray dog","dog barking","dog noise","dangerous dog","dog order"},
-         new[]{"https://www.bradford.gov.uk/environment/dog-control/dog-control-and-dog-wardens/"},
+         new[]{"https://www.bradford.gov.uk/environment/dogs/dogs/"},
          "Dog control and dog wardens",
          "Would you like to know about reporting other environmental issues?"),
 
         (new[]{"public right of way","footpath","bridleway","rights of way","blocked path","countryside walk","public footpath","right of way blocked","definitive map"},
-         new[]{"https://www.bradford.gov.uk/environment/countryside/countryside-and-rights-of-way/"},
+         new[]{"https://www.bradford.gov.uk/environment/countryside-and-rights-of-way/countryside-and-rights-of-way/"},
          "Public rights of way and countryside",
          "Would you like to know about guided walks or countryside access in Bradford?"),
 
@@ -35,7 +35,7 @@ public partial class CouncilToolService
          "Would you like to know about the Clean Air Zone or electric vehicle charging?"),
 
         (new[]{"saltaire","world heritage","saltaire world heritage","UNESCO"},
-         new[]{"https://www.bradford.gov.uk/environment/saltaire-world-heritage-site/saltaire-world-heritage-site/"},
+         new[]{"https://www.bradford.gov.uk/environment/saltaire/saltaire-world-heritage-site/"},
          "Saltaire World Heritage Site",
          "Would you like to know about conservation areas or listed buildings in Bradford?"),
 

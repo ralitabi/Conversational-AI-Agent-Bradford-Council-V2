@@ -145,7 +145,7 @@ public partial class CouncilToolService
 
         var lib = match.lib;
         var pageUrl = $"https://www.bradford.gov.uk/libraries/find-your-local-library/{lib.Slug}/";
-        const string joinUrl = "https://www.bradford.gov.uk/libraries/join-the-library/";
+        const string joinUrl = "https://www.bradford.gov.uk/libraries/library-services-online/join-the-library/";
 
         // Fetch library page and join page in parallel
         var pageTask = FetchPageTextAsync(pageUrl, ct);
@@ -193,7 +193,7 @@ public partial class CouncilToolService
 
         sb.AppendLine();
         sb.AppendLine("**Ways to join:**");
-        sb.AppendLine("- Online: complete the form at https://www.bradford.gov.uk/libraries/join-the-library/");
+        sb.AppendLine("- Online: complete the form at https://www.bradford.gov.uk/libraries/library-services-online/join-the-library/");
         sb.AppendLine("- In person: visit any Bradford library with proof of address and ID");
         sb.AppendLine("- Membership is FREE for all Bradford residents");
         sb.AppendLine("- Children under 16 can join with a parent or guardian's signature");

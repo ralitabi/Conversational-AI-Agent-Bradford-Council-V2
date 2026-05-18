@@ -9,6 +9,10 @@ public class AgentDbContext : DbContext
     public AgentDbContext(DbContextOptions<AgentDbContext> options) : base(options) { }
 
     public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
+    public DbSet<AdminActivity>    AdminActivities   => Set<AdminActivity>();
+    public DbSet<AdminProfile>     AdminProfiles     => Set<AdminProfile>();
+    public DbSet<ContactSession>   ContactSessions   => Set<ContactSession>();
+    public DbSet<ContactMessage>   ContactMessages   => Set<ContactMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -18,6 +22,30 @@ public class AgentDbContext : DbContext
             e.HasIndex(t => t.SessionId);
             e.HasIndex(t => t.Timestamp);
             e.Property(t => t.Role).HasMaxLength(20);
+        });
+        modelBuilder.Entity<AdminActivity>(e =>
+        {
+            e.HasKey(a => a.Id);
+            e.HasIndex(a => a.Username);
+            e.HasIndex(a => a.Timestamp);
+            e.Property(a => a.Action).HasMaxLength(30);
+        });
+        modelBuilder.Entity<AdminProfile>(e =>
+        {
+            e.HasKey(p => p.Id);
+            e.HasIndex(p => p.Username).IsUnique();
+        });
+        modelBuilder.Entity<ContactSession>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.HasIndex(s => s.Status);
+            e.HasIndex(s => s.CreatedAt);
+        });
+        modelBuilder.Entity<ContactMessage>(e =>
+        {
+            e.HasKey(m => m.Id);
+            e.HasIndex(m => m.SessionId);
+            e.HasIndex(m => m.Timestamp);
         });
     }
 }

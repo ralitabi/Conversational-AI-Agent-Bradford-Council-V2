@@ -10,7 +10,7 @@ public partial class CouncilToolService
          "Would you like to know about apprenticeships or graduate opportunities?"),
 
         (new[]{"apprenticeship","apprentice","bradford apprenticeship","earn and learn","level 2","level 3","apprenticeship bradford"},
-         new[]{"https://www.bradford.gov.uk/jobs/apprenticeships/apprenticeships/"},
+         new[]{"https://www.bradford.gov.uk/jobs/apprenticeships/apprenticeship-vacancies-in-west-yorkshire/"},
          "Apprenticeships at Bradford Council",
          "Would you like to know about other job opportunities or volunteering?"),
 
@@ -30,7 +30,7 @@ public partial class CouncilToolService
          "Would you like to know about apprenticeships or paid job opportunities at Bradford Council?"),
 
         (new[]{"graduate","graduate scheme","graduate programme","graduate job bradford"},
-         new[]{"https://www.bradford.gov.uk/jobs/graduate-programmes/graduate-opportunities/"},
+         new[]{"https://www.bradford.gov.uk/jobs/graduate-opportunities/graduate-opportunities/"},
          "Graduate opportunities at Bradford Council",
          "Would you like to know about apprenticeships or other council vacancies?"),
 

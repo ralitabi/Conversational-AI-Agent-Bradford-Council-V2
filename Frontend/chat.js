@@ -1224,6 +1224,367 @@ function showToast(msg) {
 }
 
 /* ══════════════════════════════════════════════════════
+   CONTACT COUNCIL STAFF — AGENTIC FLOW
+══════════════════════════════════════════════════════ */
+const CONTACT_API = (() => {
+  const h = window.location.hostname;
+  return (h === 'localhost' || h === '127.0.0.1')
+    ? 'http://localhost:5000/api/contact'
+    : '/api/contact';
+})();
+
+let contactSessionId = null;
+let contactPollTimer = null;
+let contactLastMsgId = 0;
+let contactClosed    = false;
+let contactAttach    = null;
+
+// Agentic conversation state
+let convState = 'idle';
+let convData  = {};
+
+const CONTACT_TOPICS = [
+  'Council Tax', 'Housing', 'Benefits & Support', 'Bins & Recycling',
+  'Planning', 'Schools & Education', 'Health & Social Care',
+  'Transport & Roads', 'Business', 'Other'
+];
+
+function openContact() {
+  convState = 'idle';
+  convData  = {};
+  contactAttach = null;
+
+  const panel = document.getElementById('contact-panel');
+  if (!panel) return;
+  panel.style.display = 'flex';
+  panel.style.flexDirection = 'column';
+  document.getElementById('contact-conv-view').style.display  = '';
+  document.getElementById('contact-chat-view').style.display  = 'none';
+  document.getElementById('contact-conv-msgs').innerHTML      = '';
+  document.getElementById('contact-chip-row').style.display   = 'none';
+  const inp = document.getElementById('contact-conv-input');
+  inp.disabled = true;
+  inp.value    = '';
+  inp.style.height = 'auto';
+
+  const profile = getProfile() || {};
+  setTimeout(() => {
+    if (profile.name) {
+      convData.name  = profile.name;
+      convData.email = profile.email || '';
+      _convBotMsg(`Welcome back, <strong>${esc(profile.name)}</strong>! I'll connect you with a Bradford Council staff member.<br>What is your enquiry about?`);
+      setTimeout(() => { convState = 'topic'; _showTopicChips(); }, 500);
+    } else {
+      convState = 'name';
+      _convBotMsg("Hi there! I'll connect you with a Bradford Council staff member.<br>To start, what's your <strong>full name</strong>?");
+      inp.disabled = false;
+      inp.focus();
+    }
+  }, 250);
+}
+
+function closeContact() {
+  document.getElementById('contact-panel').style.display = 'none';
+  if (contactPollTimer) { clearInterval(contactPollTimer); contactPollTimer = null; }
+}
+
+// ── Bot message helpers ────────────────────────────────────────────────────
+function _convBotMsg(html) {
+  const msgs = document.getElementById('contact-conv-msgs');
+  const t = document.getElementById('conv-typing-dot');
+  if (t) t.remove();
+  const div = document.createElement('div');
+  div.className = 'conv-bot-row';
+  div.innerHTML = `
+    <div class="conv-bot-ava"><img src="https://www.bradford.gov.uk/css/2025/images/crest.svg" alt="BC"/></div>
+    <div class="conv-bot-bubble">${html}</div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function _convTyping() {
+  const msgs = document.getElementById('contact-conv-msgs');
+  const d = document.createElement('div');
+  d.className = 'conv-bot-row'; d.id = 'conv-typing-dot';
+  d.innerHTML = `<div class="conv-bot-ava"><img src="https://www.bradford.gov.uk/css/2025/images/crest.svg" alt="BC"/></div><div class="conv-bot-bubble conv-typing"><span></span><span></span><span></span></div>`;
+  msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function _convUserMsg(text) {
+  const msgs = document.getElementById('contact-conv-msgs');
+  const div = document.createElement('div');
+  div.className = 'conv-user-row';
+  div.innerHTML = `<div class="conv-user-bubble">${esc(text)}</div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function _showTopicChips() {
+  const row = document.getElementById('contact-chip-row');
+  row.innerHTML = CONTACT_TOPICS.map(t =>
+    `<button class="conv-chip" onclick="handleConvTopic(this,'${t}')">${t}</button>`
+  ).join('');
+  row.style.display = 'flex';
+  document.getElementById('contact-conv-input').disabled = true;
+}
+
+// ── User sends in conversation ─────────────────────────────────────────────
+function convContactSend() {
+  const inp = document.getElementById('contact-conv-input');
+  const val = inp.value.trim();
+  if (!val || inp.disabled) return;
+  inp.value = ''; inp.style.height = 'auto';
+  _processConvInput(val);
+}
+
+function convContactKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); convContactSend(); }
+}
+
+function _processConvInput(val) {
+  const inp = document.getElementById('contact-conv-input');
+  switch (convState) {
+    case 'name':
+      convData.name = val;
+      _convUserMsg(val);
+      inp.disabled = true;
+      convState = 'topic';
+      _convTyping();
+      setTimeout(() => {
+        _convBotMsg(`Thanks, <strong>${esc(val)}</strong>! What is your enquiry about?`);
+        _showTopicChips();
+      }, 700);
+      break;
+
+    case 'message':
+      convData.message = val;
+      _convUserMsg(val);
+      inp.disabled = true;
+      if (convData.email) {
+        _submitConvContact();
+      } else {
+        convState = 'email';
+        _convTyping();
+        setTimeout(() => {
+          _convBotMsg("What's your <strong>email address</strong>? Staff will use it only to follow up on your query — it is kept private and never shared publicly. <span style='color:#94a3b8;font-size:.8em'>(type <em>skip</em> to continue without)</span>");
+          inp.disabled = false; inp.placeholder = 'your@email.com or skip'; inp.focus();
+        }, 700);
+      }
+      break;
+
+    case 'email': {
+      const isSkip = val.toLowerCase() === 'skip' || !val.includes('@');
+      const email  = isSkip ? '' : val.trim();
+      convData.email = email;
+      if (email) {
+        // Auto-save email to profile so it's never asked again
+        const existing = getProfile() || {};
+        saveProfile({ ...existing, email });
+        _convUserMsg('✓ Email saved');
+      } else {
+        _convUserMsg('(no email)');
+      }
+      inp.disabled = true;
+      _submitConvContact();
+      break;
+    }
+  }
+}
+
+function handleConvTopic(btn, topic) {
+  document.getElementById('contact-chip-row').style.display = 'none';
+  convData.topic = topic;
+  _convUserMsg(topic);
+  convState = 'message';
+  _convTyping();
+  const inp = document.getElementById('contact-conv-input');
+  setTimeout(() => {
+    _convBotMsg(`Got it — <strong>${esc(topic)}</strong>.<br>Please describe your question or issue:`);
+    inp.disabled = false; inp.placeholder = 'Describe your issue…'; inp.focus();
+  }, 700);
+}
+
+async function _submitConvContact() {
+  _convTyping();
+  await new Promise(r => setTimeout(r, 700));
+  _convBotMsg("Connecting you with a Bradford Council staff member now...");
+  try {
+    const r = await fetch(CONTACT_API + '/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name:    convData.name,
+        email:   convData.email || '',
+        phone:   '',
+        subject: convData.topic,
+        message: convData.message
+      })
+    });
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    contactSessionId = d.sessionId;
+    contactLastMsgId = 0;
+    contactClosed    = false;
+    setTimeout(() => startContactChat(d.sessionId, convData.name, convData.topic, convData.message), 800);
+  } catch {
+    const t = document.getElementById('conv-typing-dot');
+    if (t) t.remove();
+    _convBotMsg("Sorry, there was a problem reaching staff. Please try again.");
+    convState = 'message';
+    const inp = document.getElementById('contact-conv-input');
+    inp.disabled = false; inp.focus();
+  }
+}
+
+function startContactChat(sessionId, name, subject, initMessage) {
+  document.getElementById('contact-form-view').style.display = 'none';
+  document.getElementById('contact-chat-view').style.display = 'flex';
+  document.getElementById('contact-ref').textContent  = sessionId;
+  document.getElementById('contact-ref2').textContent = sessionId;
+
+  const msgsEl = document.getElementById('contact-msgs');
+  msgsEl.innerHTML = `
+    <div class="contact-waiting">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <div><strong>Your message has been received.</strong></div>
+      <div>A council staff member will reply shortly.</div>
+      <div style="font-size:.72rem;margin-top:6px">Reference: <strong>${sessionId}</strong></div>
+    </div>`;
+
+  appendContactMsg('citizen', name, initMessage);
+
+  contactLastMsgId = 0;
+  contactPollTimer = setInterval(pollContactMessages, 2500);
+}
+
+async function pollContactMessages() {
+  if (!contactSessionId) return;
+  try {
+    const r = await fetch(`${CONTACT_API}/${contactSessionId}/messages?after=${contactLastMsgId}`);
+    if (!r.ok) return;
+    const d = await r.json();
+
+    d.messages.forEach(m => {
+      if (m.sender === 'admin') {
+        appendContactMsg('admin', m.senderName, m.content, m.timestamp);
+        // Remove waiting message on first admin reply
+        const waiting = document.querySelector('.contact-waiting');
+        if (waiting) waiting.remove();
+      }
+      contactLastMsgId = Math.max(contactLastMsgId, m.id);
+    });
+
+    // Update status badge
+    const badge = document.getElementById('contact-status-label');
+    if (badge) {
+      const labels = { waiting: 'Waiting', active: 'Active', closed: 'Closed' };
+      badge.textContent = labels[d.status] || d.status;
+      badge.className = 'contact-status-badge ' + d.status;
+    }
+
+    if (d.status === 'closed' && !contactClosed) {
+      contactClosed = true;
+      clearInterval(contactPollTimer);
+      contactPollTimer = null;
+      appendContactSystemMsg('This session has been closed by staff. Thank you for contacting Bradford Council.');
+      document.getElementById('contact-input').disabled = true;
+      document.querySelector('.contact-send-btn').disabled = true;
+    }
+  } catch {}
+}
+
+function _renderMsgContent(text) {
+  if (!text) return '';
+  const parts = text.split(/(\[IMG\][\s\S]*?\[\/IMG\])/);
+  return parts.map(p => {
+    if (p.startsWith('[IMG]') && p.endsWith('[/IMG]')) {
+      const src = p.slice(5, -6);
+      return `<img src="${src}" style="max-width:200px;max-height:160px;border-radius:8px;margin-top:6px;display:block;cursor:pointer" onclick="window.open(this.src,'_blank')">`;
+    }
+    return escapeHtml(p).replace(/\n/g, '<br>');
+  }).join('');
+}
+
+function attachContactImage(input) {
+  const file = input.files[0];
+  if (!file) return;
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  }).then(dataUrl => {
+    contactAttach = dataUrl;
+    const prev = document.getElementById('contact-attach-preview');
+    if (prev) {
+      prev.innerHTML = `<img src="${dataUrl}" style="max-height:56px;max-width:70px;border-radius:6px;border:1px solid #e2e8f0"><button onclick="clearContactAttach()" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:1.2rem;line-height:1;padding:0 4px" title="Remove">&times;</button>`;
+      prev.style.display = 'flex';
+    }
+  });
+  input.value = '';
+}
+
+function clearContactAttach() {
+  contactAttach = null;
+  const prev = document.getElementById('contact-attach-preview');
+  if (prev) { prev.innerHTML = ''; prev.style.display = 'none'; }
+}
+
+function appendContactMsg(sender, senderName, content, timestamp) {
+  const msgsEl = document.getElementById('contact-msgs');
+  const time   = timestamp ? new Date(timestamp).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' }) : new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  const div = document.createElement('div');
+  div.className = 'contact-msg ' + sender;
+  div.innerHTML = `<div class="contact-bubble">${_renderMsgContent(content)}</div><div class="contact-msg-meta">${sender === 'admin' ? escapeHtml(senderName) + ' · ' : ''}${time}</div>`;
+  msgsEl.appendChild(div);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+}
+
+function appendContactSystemMsg(text) {
+  const msgsEl = document.getElementById('contact-msgs');
+  const div = document.createElement('div');
+  div.style.cssText = 'text-align:center;padding:10px;font-size:.76rem;color:#94a3b8;font-style:italic';
+  div.textContent = text;
+  msgsEl.appendChild(div);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+}
+
+async function sendContactMessage() {
+  const inp = document.getElementById('contact-input');
+  const text = inp.value.trim();
+  if ((!text && !contactAttach) || !contactSessionId || contactClosed) return;
+
+  inp.value = ''; inp.style.height = 'auto';
+  let content = text;
+  if (contactAttach) {
+    content = (text ? text + '\n' : '') + `[IMG]${contactAttach}[/IMG]`;
+    clearContactAttach();
+  }
+
+  appendContactMsg('citizen', convData.name || 'You', content);
+
+  try {
+    await fetch(`${CONTACT_API}/${contactSessionId}/message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    });
+  } catch {}
+}
+
+function contactKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendContactMessage(); }
+}
+function contactResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+/* ══════════════════════════════════════════════════════
    SETTINGS PANEL
 ══════════════════════════════════════════════════════ */
 const BACK_ARROW = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="15 18 9 12 15 6"/></svg>`;
@@ -1310,6 +1671,10 @@ function renderSettingsHome() {
 function renderProfileScreen() {
   const p  = getProfile() || {};
   const sp = document.getElementById('settings-panel');
+  const photoEl = p.photo
+    ? `<img src="${p.photo}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid #005192">`
+    : `<div style="width:64px;height:64px;border-radius:50%;background:#dbeafe;display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:700;color:#005192">${(p.name||'?').charAt(0).toUpperCase()}</div>`;
+
   sp.innerHTML = `
     <div class="sp-header">
       <button class="sp-back" onclick="renderSettingsHome()">${BACK_ARROW} Settings</button>
@@ -1317,12 +1682,30 @@ function renderProfileScreen() {
       <span class="sp-spacer"></span>
     </div>
     <div class="sp-body">
-      <p class="sp-form-hint">Stored only on this device. Alex uses these to personalise answers.</p>
+      <p class="sp-form-hint">Stored only on this device. Used to personalise answers and pre-fill contact forms.</p>
+
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
+        <label for="pf-photo" style="cursor:pointer" title="Upload profile photo">
+          ${photoEl}
+        </label>
+        <div>
+          <div style="font-size:.8rem;font-weight:600;color:#1e293b">Profile Photo</div>
+          <label for="pf-photo" style="font-size:.75rem;color:#005192;cursor:pointer;text-decoration:underline">Upload photo</label>
+          ${p.photo ? `<span style="font-size:.75rem;color:#94a3b8"> · </span><button onclick="removeProfilePhoto()" style="font-size:.75rem;color:#dc2626;background:none;border:none;cursor:pointer;text-decoration:underline;padding:0">Remove</button>` : ''}
+        </div>
+        <input type="file" id="pf-photo" accept="image/*" style="display:none" onchange="onProfilePhotoSelected(this)">
+      </div>
 
       <div class="sp-field">
         <label class="sp-field-label">Your name</label>
         <input id="pf-name" class="sp-field-input" type="text" placeholder="e.g. Sarah" value="${esc(p.name || '')}"/>
         <span class="sp-field-hint">Alex will greet and address you by name</span>
+      </div>
+
+      <div class="sp-field">
+        <label class="sp-field-label">Email address</label>
+        <input id="pf-email" class="sp-field-input" type="email" placeholder="your@email.com" value="${esc(p.email || '')}"/>
+        <span class="sp-field-hint">Auto-filled when contacting staff — skip the typing</span>
       </div>
 
       <div class="sp-field">
@@ -1338,20 +1721,44 @@ function renderProfileScreen() {
       </div>
 
       <button class="sp-save-btn" onclick="saveProfileFromForm()">Save Details</button>
-      ${p.name || p.postcode || p.context
+      ${p.name || p.postcode || p.context || p.email
         ? `<button class="sp-clear-btn" onclick="clearProfile()">Clear all details</button>`
         : ''}
     </div>`;
 }
 
 function saveProfileFromForm() {
+  const existing = getProfile() || {};
   const name     = document.getElementById('pf-name')?.value.trim();
+  const email    = document.getElementById('pf-email')?.value.trim();
   const postcode = document.getElementById('pf-postcode')?.value.trim().toUpperCase();
   const context  = document.getElementById('pf-context')?.value.trim();
-  saveProfile({ name, postcode, context });
+  saveProfile({ ...existing, name, email, postcode, context });
   sessionProfileInjected = false;
   showToast('Details saved!');
   renderSettingsHome();
+}
+
+function onProfilePhotoSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const existing = getProfile() || {};
+    saveProfile({ ...existing, photo: e.target.result });
+    showToast('Photo saved!');
+    renderProfileScreen();
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+function removeProfilePhoto() {
+  const existing = getProfile() || {};
+  delete existing.photo;
+  saveProfile(existing);
+  showToast('Photo removed');
+  renderProfileScreen();
 }
 
 function clearProfile() {

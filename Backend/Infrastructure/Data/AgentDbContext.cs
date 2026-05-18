@@ -14,6 +14,7 @@ public class AgentDbContext : DbContext
     public DbSet<ContactSession>   ContactSessions   => Set<ContactSession>();
     public DbSet<ContactMessage>   ContactMessages   => Set<ContactMessage>();
     public DbSet<AdminUser>        AdminUsers        => Set<AdminUser>();
+    public DbSet<ContactFeedback>  ContactFeedback   => Set<ContactFeedback>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,6 +53,12 @@ public class AgentDbContext : DbContext
         {
             e.HasKey(u => u.Id);
             e.HasIndex(u => u.Username).IsUnique();
+        });
+        modelBuilder.Entity<ContactFeedback>(e =>
+        {
+            e.HasKey(f => f.Id);
+            e.HasIndex(f => f.SessionId);
+            e.HasIndex(f => f.AdminUsername);
         });
     }
 }

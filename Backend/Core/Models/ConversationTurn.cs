@@ -68,6 +68,17 @@ public class AdminActivity
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 }
 
+public class ContactFeedback
+{
+    public int      Id            { get; set; }
+    public string   SessionId     { get; set; } = string.Empty;
+    public string   AdminUsername { get; set; } = string.Empty;
+    public string   AdminName     { get; set; } = string.Empty;
+    public int      Stars         { get; set; }          // 1–5
+    public string?  Comment       { get; set; }
+    public DateTime SubmittedAt   { get; set; } = DateTime.UtcNow;
+}
+
 public class LlmMessage
 {
     public string Role { get; set; } = string.Empty;

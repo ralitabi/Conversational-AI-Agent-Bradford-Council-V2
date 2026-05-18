@@ -168,6 +168,19 @@ using (var scope = app.Services.CreateScope())
     // Add columns that may not exist on older DBs
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"ContactSessions\" ADD COLUMN \"AssignedTo\" TEXT"); } catch { }
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"AdminUsers\" ADD COLUMN \"Specializations\" TEXT"); } catch { }
+    await db.Database.ExecuteSqlRawAsync("""
+        CREATE TABLE IF NOT EXISTS "ContactFeedback" (
+            "Id"            INTEGER NOT NULL CONSTRAINT "PK_ContactFeedback" PRIMARY KEY AUTOINCREMENT,
+            "SessionId"     TEXT    NOT NULL,
+            "AdminUsername" TEXT    NOT NULL,
+            "AdminName"     TEXT    NOT NULL,
+            "Stars"         INTEGER NOT NULL,
+            "Comment"       TEXT,
+            "SubmittedAt"   TEXT    NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS "IX_ContactFeedback_AdminUsername" ON "ContactFeedback" ("AdminUsername");
+        CREATE INDEX IF NOT EXISTS "IX_ContactFeedback_SessionId"     ON "ContactFeedback" ("SessionId");
+        """);
 
     // Seed default admin users into DB if table is empty
     if (!await db.AdminUsers.AnyAsync())

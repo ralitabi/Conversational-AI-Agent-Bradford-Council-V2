@@ -255,6 +255,35 @@ public class ContactController : ControllerBase
         return Ok(new { success = true, assignedTo = targetUser.Name });
     }
 
+    // ── POST /api/contact/{id}/feedback  (citizen submits star rating) ──────────
+    [HttpPost("{sessionId}/feedback")]
+    public async Task<IActionResult> SubmitFeedback(string sessionId, [FromBody] FeedbackRequest req, CancellationToken ct)
+    {
+        if (req.Stars < 1 || req.Stars > 5) return BadRequest(new { error = "Stars must be 1–5." });
+        if (string.IsNullOrWhiteSpace(req.AdminUsername)) return BadRequest(new { error = "AdminUsername required." });
+
+        var session = await _db.ContactSessions.FindAsync(new object[] { sessionId }, ct);
+        if (session is null) return NotFound();
+
+        // Prevent duplicate feedback for same session
+        if (await _db.ContactFeedback.AnyAsync(f => f.SessionId == sessionId, ct))
+            return Conflict(new { error = "Feedback already submitted for this session." });
+
+        var adminUser = await _db.AdminUsers.FirstOrDefaultAsync(u => u.Username == req.AdminUsername, ct);
+        _db.ContactFeedback.Add(new ContactFeedback
+        {
+            SessionId     = sessionId,
+            AdminUsername = req.AdminUsername,
+            AdminName     = adminUser?.Name ?? req.AdminUsername,
+            Stars         = req.Stars,
+            Comment       = req.Comment?.Trim(),
+            SubmittedAt   = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("Feedback for {Admin}: {Stars}★ on session {SessionId}", req.AdminUsername, req.Stars, sessionId);
+        return Ok(new { success = true });
+    }
+
     // ── GET /api/contact/admin/staff  (list active admins for transfer dropdown) ─
     [HttpGet("admin/staff")]
     public async Task<IActionResult> GetStaff(CancellationToken ct)
@@ -291,3 +320,4 @@ public sealed class StartContactRequest  { public string? Name { get; set; } pub
 public sealed class SendMessageRequest   { public string? Content { get; set; } }
 public sealed class UpdateStatusRequest  { public string Status { get; set; } = "closed"; }
 public sealed class TransferRequest      { public string? ToUsername { get; set; } }
+public sealed class FeedbackRequest      { public int Stars { get; set; } public string? Comment { get; set; } public string? AdminUsername { get; set; } }

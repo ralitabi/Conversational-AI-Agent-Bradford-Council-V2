@@ -473,6 +473,50 @@ public class AdminController : ControllerBase
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    // FEEDBACK (superadmin)
+    // ════════════════════════════════════════════════════════════════════════
+
+    // GET /api/admin/users/{username}/feedback
+    [HttpGet("users/{username}/feedback")]
+    public async Task<IActionResult> GetUserFeedback(string username, CancellationToken ct)
+    {
+        var s = CurrentSession();
+        if (s is null) return Unauthorized();
+        if (s.Role != "superadmin") return StatusCode(403, new { error = "Superadmin only." });
+
+        var items = await _db.ContactFeedback
+            .Where(f => f.AdminUsername == username)
+            .OrderByDescending(f => f.SubmittedAt)
+            .Select(f => new { f.Id, f.SessionId, f.Stars, f.Comment, f.SubmittedAt })
+            .ToListAsync(ct);
+
+        var avg = items.Count > 0 ? Math.Round(items.Average(f => f.Stars), 1) : 0.0;
+        return Ok(new { username, total = items.Count, average = avg, items });
+    }
+
+    // GET /api/admin/feedback/all  — summary for all staff
+    [HttpGet("feedback/all")]
+    public async Task<IActionResult> GetAllFeedback(CancellationToken ct)
+    {
+        var s = CurrentSession();
+        if (s is null) return Unauthorized();
+        if (s.Role != "superadmin") return StatusCode(403, new { error = "Superadmin only." });
+
+        var summary = await _db.ContactFeedback
+            .GroupBy(f => new { f.AdminUsername, f.AdminName })
+            .Select(g => new {
+                username = g.Key.AdminUsername,
+                name     = g.Key.AdminName,
+                total    = g.Count(),
+                average  = Math.Round(g.Average(f => (double)f.Stars), 1),
+                latest   = g.Max(f => f.SubmittedAt)
+            })
+            .OrderByDescending(x => x.latest)
+            .ToListAsync(ct);
+        return Ok(summary);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     // USER MANAGEMENT (superadmin only)
     // ════════════════════════════════════════════════════════════════════════
 

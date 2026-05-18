@@ -165,8 +165,9 @@ using (var scope = app.Services.CreateScope())
         CREATE UNIQUE INDEX IF NOT EXISTS "IX_AdminUsers_Username" ON "AdminUsers" ("Username");
         """);
 
-    // Add AssignedTo column to ContactSessions if missing (ALTER TABLE is idempotent via try-catch)
+    // Add columns that may not exist on older DBs
     try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"ContactSessions\" ADD COLUMN \"AssignedTo\" TEXT"); } catch { }
+    try { await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"AdminUsers\" ADD COLUMN \"Specializations\" TEXT"); } catch { }
 
     // Seed default admin users into DB if table is empty
     if (!await db.AdminUsers.AnyAsync())

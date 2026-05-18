@@ -486,9 +486,28 @@ public class AdminController : ControllerBase
 
         var dbUsers = await _db.AdminUsers.OrderBy(u => u.CreatedAt).ToListAsync(ct);
         var result  = dbUsers.Select(u => new {
-            u.Username, u.Name, u.Role, u.IsActive, u.CreatedAt, u.LastLoginAt
+            u.Username, u.Name, u.Role, u.Specializations, u.IsActive, u.CreatedAt, u.LastLoginAt
         });
         return Ok(result);
+    }
+
+    // PATCH /api/admin/users/{username}/info — update display name + specializations
+    [HttpPatch("users/{username}/info")]
+    public async Task<IActionResult> UpdateUserInfo(string username, [FromBody] UpdateUserInfoRequest req, CancellationToken ct)
+    {
+        var s = CurrentSession();
+        if (s is null) return Unauthorized();
+        if (s.Role != "superadmin") return StatusCode(403, new { error = "Superadmin only." });
+
+        var user = await _db.AdminUsers.FirstOrDefaultAsync(u => u.Username == username, ct);
+        if (user is null) return NotFound();
+
+        if (!string.IsNullOrWhiteSpace(req.Name)) user.Name = req.Name.Trim();
+        user.Specializations = string.IsNullOrWhiteSpace(req.Specializations) ? null : req.Specializations.Trim();
+
+        await _db.SaveChangesAsync(ct);
+        await LogAsync(s, "update_user_info", $"Updated info for {username}", ct);
+        return Ok(new { success = true });
     }
 
     // POST /api/admin/users — create new staff account
@@ -506,12 +525,13 @@ public class AdminController : ControllerBase
 
         _db.AdminUsers.Add(new AdminUser
         {
-            Username     = req.Username.Trim(),
-            PasswordHash = AdminUserHelper.Hash(req.Password),
-            Name         = req.Name.Trim(),
-            Role         = req.Role is "superadmin" ? "superadmin" : "admin",
-            IsActive     = true,
-            CreatedAt    = DateTime.UtcNow
+            Username        = req.Username.Trim(),
+            PasswordHash    = AdminUserHelper.Hash(req.Password),
+            Name            = req.Name.Trim(),
+            Role            = req.Role is "superadmin" ? "superadmin" : "admin",
+            Specializations = string.IsNullOrWhiteSpace(req.Specializations) ? null : req.Specializations.Trim(),
+            IsActive        = true,
+            CreatedAt       = DateTime.UtcNow
         });
         await _db.SaveChangesAsync(ct);
         await LogAsync(s, "create_user", $"Created user: {req.Username}", ct);
@@ -602,7 +622,8 @@ public sealed class AdminLoginRequest    { public string? Username { get; set; }
 public sealed class AdminUserConfig      { public string Username { get; set; } = ""; public string Password { get; set; } = ""; public string Name { get; set; } = ""; public string Role { get; set; } = "admin"; }
 public sealed class UpdateProfileRequest { public string? DisplayName { get; set; } public string? Bio { get; set; } }
 public sealed class UploadAvatarRequest  { public string? Base64 { get; set; } public string? MimeType { get; set; } }
-public sealed class CreateUserRequest    { public string? Username { get; set; } public string? Password { get; set; } public string? Name { get; set; } public string? Role { get; set; } }
+public sealed class CreateUserRequest    { public string? Username { get; set; } public string? Password { get; set; } public string? Name { get; set; } public string? Role { get; set; } public string? Specializations { get; set; } }
+public sealed class UpdateUserInfoRequest { public string? Name { get; set; } public string? Specializations { get; set; } }
 public sealed class ChangePasswordRequest { public string? NewPassword { get; set; } }
 public sealed class ChangeRoleRequest    { public string Role { get; set; } = "admin"; }
 public sealed class ToggleStatusRequest  { public bool IsActive { get; set; } }

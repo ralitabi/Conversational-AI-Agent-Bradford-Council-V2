@@ -1,7 +1,10 @@
+using Bradford.Core.Interfaces;
 using Bradford.Core.Models;
 using Bradford.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Bradford.Api.Controllers;
 
@@ -12,12 +15,14 @@ public class ContactController : ControllerBase
 {
     private readonly AgentDbContext _db;
     private readonly AdminAuthService _auth;
+    private readonly IToolService _tools;
     private readonly ILogger<ContactController> _logger;
 
-    public ContactController(AgentDbContext db, AdminAuthService auth, ILogger<ContactController> logger)
+    public ContactController(AgentDbContext db, AdminAuthService auth, IToolService tools, ILogger<ContactController> logger)
     {
-        _db    = db;
-        _auth  = auth;
+        _db     = db;
+        _auth   = auth;
+        _tools  = tools;
         _logger = logger;
     }
 
@@ -122,6 +127,29 @@ public class ContactController : ControllerBase
         session.Status    = session.Status == "waiting" ? "waiting" : "active";
         session.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
+        return Ok(new { success = true });
+    }
+
+    // ── POST /api/contact/{id}/close  (citizen ends session) ─────────────────
+    [HttpPost("{sessionId}/close")]
+    public async Task<IActionResult> CitizenClose(string sessionId, CancellationToken ct)
+    {
+        var session = await _db.ContactSessions.FindAsync(new object[] { sessionId }, ct);
+        if (session is null) return NotFound();
+        if (session.Status == "closed") return Ok(new { message = "Already closed." });
+
+        _db.ContactMessages.Add(new ContactMessage
+        {
+            SessionId  = sessionId,
+            Sender     = "system",
+            SenderName = "System",
+            Content    = "The citizen has ended this chat session.",
+            Timestamp  = DateTime.UtcNow
+        });
+        session.Status    = "closed";
+        session.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("Citizen closed contact session {Id}", sessionId);
         return Ok(new { success = true });
     }
 
@@ -282,6 +310,50 @@ public class ContactController : ControllerBase
         await _db.SaveChangesAsync(ct);
         _logger.LogInformation("Feedback for {Admin}: {Stars}★ on session {SessionId}", req.AdminUsername, req.Stars, sessionId);
         return Ok(new { success = true });
+    }
+
+    // ── GET /api/contact/address?postcode=  (citizen address lookup) ────────────
+    [HttpGet("address")]
+    public async Task<IActionResult> AddressLookup([FromQuery] string postcode, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(postcode))
+            return BadRequest(new { error = "Postcode required." });
+
+        var raw = await _tools.ExecuteAsync(
+            "lookup_addresses_for_postcode",
+            JsonSerializer.Serialize(new { postcode = postcode.Trim().ToUpper() }),
+            ct);
+
+        var m = Regex.Match(raw, @"\[\[ADDRESS_LIST\]\](.*?)\[\[/ADDRESS_LIST\]\]", RegexOptions.Singleline);
+        if (!m.Success)
+            return Ok(new { addresses = Array.Empty<object>() });
+
+        try
+        {
+            using var doc = JsonDocument.Parse(m.Groups[1].Value.Trim());
+            return Ok(new { addresses = JsonSerializer.Deserialize<JsonElement>(m.Groups[1].Value.Trim()) });
+        }
+        catch { return Ok(new { addresses = Array.Empty<object>() }); }
+    }
+
+    // ── GET /api/contact/staff-avatar?name=  (public — citizen fetches admin photo) ─
+    [HttpGet("staff-avatar")]
+    public async Task<IActionResult> StaffAvatar([FromQuery] string name, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return NotFound();
+
+        var profile = await _db.AdminProfiles.FirstOrDefaultAsync(p => p.DisplayName == name, ct);
+
+        if (profile == null)
+        {
+            var user = await _db.AdminUsers.FirstOrDefaultAsync(u => u.Name == name && u.IsActive, ct);
+            if (user != null)
+                profile = await _db.AdminProfiles.FirstOrDefaultAsync(p => p.Username == user.Username, ct);
+        }
+
+        if (profile?.AvatarBase64 == null) return NotFound();
+
+        return Ok(new { avatarDataUrl = $"data:{profile.AvatarMime ?? "image/jpeg"};base64,{profile.AvatarBase64}" });
     }
 
     // ── GET /api/contact/admin/staff  (list active admins for transfer dropdown) ─

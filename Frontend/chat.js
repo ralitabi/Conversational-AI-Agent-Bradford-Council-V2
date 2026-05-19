@@ -41,6 +41,10 @@ function chatClear() {
         'I can help you find the right council service, explain the next steps, and guide you to the correct contact or online page.'
       )
     + introBubble(
+        'Need to speak with a specific department?',
+        'If you\'d like to be connected to a Bradford Council department or officer, just let me know and I\'ll arrange it for you.'
+      )
+    + introBubble(
         'What would you like help with today?',
         'Choose one of the service areas below, or type your question.'
       );
@@ -97,6 +101,25 @@ async function doSend(override, displayText) {
   const text = (override || el.value).trim();
   if (!text) return;
 
+  _lastUserMsg = text;  // track for trigger detection
+
+  // ── Live support mode: route to contact API instead of AI ──
+  if (_contactMode && contactSessionId && !contactClosed) {
+    if (!text) return;
+    el.value = ''; el.style.height = 'auto';
+    document.getElementById('chat-chips').style.display = 'none';
+    addUserMsg(text);
+    try {
+      await fetch(`${CONTACT_API}/${contactSessionId}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: text })
+      });
+    } catch {}
+    el.focus();
+    return;
+  }
+
   chatEnabled = true;
   el.value = ''; el.style.height = 'auto';
   document.getElementById('chat-chips').style.display = 'none';
@@ -146,6 +169,13 @@ async function doSend(override, displayText) {
       structured?.councilTaxProperties,
       structured?.schools, structured?.schoolDetails, structured?.properties,
       structured?.sportsCentres, structured?.sportsCentreDetails);
+
+    // Offer human handoff if user asked or AI suggests it
+    if (!_contactMode && !_handoffPending) {
+      if (_wantsHuman(text) || _aiSuggestsHuman(fullText)) {
+        setTimeout(() => _showHandoffCard(), 600);
+      }
+    }
 
   } catch (err) {
     hideDots();
@@ -357,6 +387,19 @@ function introBubble(title, body) {
       <p class="intro-title">${title}</p>
       <p class="intro-body">${body}</p>
       <span class="intro-time">${now()}</span>
+    </div>
+  </div>`;
+}
+
+/* ── Tip bubble — styled differently from intro bubbles ── */
+function introTip(text) {
+  return `<div class="msg-row alex-row">
+    <div class="alex-ava">${ALEX_ICON}</div>
+    <div class="intro-tip-bubble">
+      <span class="intro-tip-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.61 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+      </span>
+      ${text}
     </div>
   </div>`;
 }
@@ -1233,11 +1276,198 @@ const CONTACT_API = (() => {
     : '/api/contact';
 })();
 
-let contactSessionId = null;
-let contactPollTimer = null;
-let contactLastMsgId = 0;
-let contactClosed    = false;
-let contactAttach    = null;
+const CONTACT_STORE_KEY = 'bca_contact_session_v1';
+
+let contactSessionId  = null;
+let contactPollTimer  = null;
+let contactLastMsgId  = 0;
+let contactClosed     = false;
+let contactAttach     = null;
+let contactUnreadCount = 0;
+let _shownMsgIds      = new Set();
+let _cachedMessages   = [];   // persisted across close/open
+
+let _contactMode    = false;   // true when live support is active
+let _handoffPending = false;   // true when confirmation card is showing
+let _lastUserMsg    = '';      // last user message text
+
+const _HUMAN_PATTERNS = [
+  // Explicit staff / person requests
+  /\b(speak|talk|chat)\s+(to|with)\s+(a\s+)?(real\s+)?(person|someone|human|staff|officer|agent)\b/i,
+  /\b(want|need|like)\s+(a\s+)?(real\s+)?(person|human|agent|officer)\b/i,
+  /\bcontact\s+staff\b/i,
+  /\bhuman\s+(help|support|agent|assistance)\b/i,
+  /\blive\s+(support|chat|agent)\b/i,
+  /\bconnect\s+me\b/i,
+  /\bescalate\b/i,
+  /\breal\s+person\b/i,
+  /\bcouncil\s+officer\b/i,
+  /\btransfer\s+me\b/i,
+  /\bspeak\s+with\s+someone\b/i,
+  // Department / team chat requests
+  /\b(?:wanna|want\s+to|need\s+to|like\s+to|can\s+i|could\s+i)\s+(?:have\s+(?:a\s+)?)?(?:chat|talk|speak)\s+with\b/i,
+  /\bchat\s+with\s+(?:the\s+)?(?:council|[\w]+(?:\s+[\w]+){0,3})\s+(?:department|team|office|section|helpline)\b/i,
+  /\bspeak\s+(?:directly\s+)?(?:to|with)\s+(?:the\s+)?(?:[\w]+(?:\s+[\w]+){0,3})\s+(?:department|team|office)\b/i,
+  /\btalk\s+(?:directly\s+)?(?:to|with)\s+(?:the\s+)?(?:[\w]+(?:\s+[\w]+){0,3})\s+(?:department|team|office)\b/i,
+  /\bget\s+(?:in\s+touch|connected|through)\s+(?:to|with)\b/i,
+  /\bput\s+me\s+(?:in\s+touch|through)\b/i,
+  /\bsomebody\s+(?:from|at)\b/i,
+];
+const _AI_ESCALATION = [
+  /\ba council officer\b/i,
+  /\bcontact bradford council directly\b/i,
+  /\bspeak(?:ing)?\s+with.*(officer|staff)\b/i,
+  /\b01274\b/,
+  /\badvise you to contact\b/i,
+  /\bi can'?t connect you\b/i,
+  /\bcannot connect you\b/i,
+  /\byou(?:'ll)? need to contact\b/i,
+  /\breach out (?:to|directly)\b/i,
+];
+function _wantsHuman(t)    { return _HUMAN_PATTERNS.some(p => p.test(t)); }
+function _aiSuggestsHuman(t){ return _AI_ESCALATION.some(p => p.test(t)); }
+
+const _adminAvatarCache = {};
+const _ADMIN_AVA_COLS   = ['#005192','#7c3aed','#16a34a','#F26C11','#0891b2','#dc2626','#4f46e5'];
+function _adminAvaColor(n) { let h=0; for(const c of n) h=(h*31+c.charCodeAt(0))%_ADMIN_AVA_COLS.length; return _ADMIN_AVA_COLS[h]; }
+async function _getAdminAvatar(name) {
+  if (name in _adminAvatarCache) return _adminAvatarCache[name];
+  _adminAvatarCache[name] = null;
+  try {
+    const r = await fetch(`${CONTACT_API}/staff-avatar?name=${encodeURIComponent(name)}`);
+    if (r.ok) { const d = await r.json(); _adminAvatarCache[name] = d.avatarDataUrl || null; }
+  } catch {}
+  return _adminAvatarCache[name];
+}
+
+// ── Contact session persistence helpers ───────────────────────────────────
+function _saveContactSession(extra = {}) {
+  if (!contactSessionId) return;
+  const stored = {
+    sessionId:    contactSessionId,
+    name:         convData.name  || '',
+    topic:        convData.topic || '',
+    lastMsgId:    contactLastMsgId,
+    closed:       contactClosed,
+    savedAt:      Date.now(),
+    messages:     _cachedMessages.slice(-150),  // keep last 150 messages
+    contactMode:  _contactMode,
+    staffName:    _currentStaffName || '',
+    ...extra
+  };
+  localStorage.setItem(CONTACT_STORE_KEY, JSON.stringify(stored));
+}
+
+function _loadContactSession() {
+  try {
+    const raw = localStorage.getItem(CONTACT_STORE_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    // Expire after 7 days
+    if (Date.now() - s.savedAt > 7 * 86400000) { localStorage.removeItem(CONTACT_STORE_KEY); return null; }
+    return s;
+  } catch { return null; }
+}
+
+function _clearContactSession() {
+  localStorage.removeItem(CONTACT_STORE_KEY);
+}
+
+// ── Notification helpers ───────────────────────────────────────────────────
+function _requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function _showContactNotification(senderName, content) {
+  // Red dot on button always
+  _setContactUnreadDot(true);
+
+  // Browser notification only when tab is hidden
+  if (!document.hidden) return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+  const text = content.startsWith('[IMG]') ? '📎 Sent an image' : content.slice(0, 80);
+  const n = new Notification('Bradford Council Staff', {
+    body: `${senderName}: ${text}`,
+    icon: 'https://www.bradford.gov.uk/css/2025/images/crest.svg',
+    tag:  'bca-contact',
+    requireInteraction: false
+  });
+  n.onclick = () => { window.focus(); openContact(); n.close(); };
+}
+
+function _setContactUnreadDot(show) {
+  const dot = document.getElementById('contact-unread-dot');
+  if (dot) dot.style.display = show ? '' : 'none';
+  // Also update page title
+  if (show) {
+    if (!document.title.startsWith('● ')) document.title = '● ' + document.title;
+  } else {
+    document.title = document.title.replace(/^● /, '');
+  }
+}
+
+// ── Auto-restore on page load ──────────────────────────────────────────────
+(function _restoreContactOnLoad() {
+  const s = _loadContactSession();
+  if (!s) return;
+  contactSessionId  = s.sessionId;
+  contactLastMsgId  = s.lastMsgId || 0;
+  contactClosed     = s.closed    || false;
+  convData.name     = s.name;
+  convData.topic    = s.topic;
+  _setContactUnreadDot(true);
+
+  if (s.contactMode && !s.closed) {
+    // Restore live support in main chat on page reload
+    _cachedMessages = s.messages || [];
+    _shownMsgIds    = new Set();
+    _contactMode    = true;
+    // Render cached messages into main chat once DOM is ready
+    setTimeout(() => {
+      _cachedMessages.forEach(m => {
+        _shownMsgIds.add(m.id);
+        if (m.sender === 'admin') _addStaffMessage(m.senderName, m.content, m.timestamp);
+        else if (m.sender === 'citizen') addUserMsg(m.content);
+      });
+      contactLastMsgId = _cachedMessages.length
+        ? Math.max(..._cachedMessages.map(m => m.id)) : 0;
+      _setLiveMode(s.sessionId, s.staffName || '');
+      if (contactPollTimer) clearInterval(contactPollTimer);
+      contactPollTimer = setInterval(_pollHandoffMessages, 2500);
+      _pollHandoffMessages();
+    }, 300);
+  } else {
+    contactPollTimer = setInterval(_backgroundContactPoll, 5000);
+  }
+})();
+
+async function _backgroundContactPoll() {
+  if (!contactSessionId) return;
+  try {
+    const r = await fetch(`${CONTACT_API}/${contactSessionId}/messages?after=${contactLastMsgId}`);
+    if (!r.ok) return;
+    const d = await r.json();
+
+    if (d.messages.length > 0) {
+      const adminMsgs = d.messages.filter(m => m.sender === 'admin');
+      if (adminMsgs.length > 0) {
+        const last = adminMsgs[adminMsgs.length - 1];
+        _showContactNotification(last.senderName, last.content);
+      }
+      d.messages.forEach(m => {
+        contactLastMsgId = Math.max(contactLastMsgId, m.id);
+        if (!_cachedMessages.find(c => c.id === m.id))
+          _cachedMessages.push({ id: m.id, sender: m.sender, senderName: m.senderName, content: m.content, timestamp: m.timestamp });
+      });
+      _saveContactSession();
+    }
+
+    contactClosed = d.status === 'closed';
+  } catch {}
+}
 
 // Agentic conversation state
 let convState = 'idle';
@@ -1250,42 +1480,15 @@ const CONTACT_TOPICS = [
 ];
 
 function openContact() {
-  convState = 'idle';
-  convData  = {};
-  contactAttach = null;
-
-  const panel = document.getElementById('contact-panel');
-  if (!panel) return;
-  panel.style.display = 'flex';
-  panel.style.flexDirection = 'column';
-  document.getElementById('contact-conv-view').style.display  = '';
-  document.getElementById('contact-chat-view').style.display  = 'none';
-  document.getElementById('contact-conv-msgs').innerHTML      = '';
-  document.getElementById('contact-chip-row').style.display   = 'none';
-  const inp = document.getElementById('contact-conv-input');
-  inp.disabled = true;
-  inp.value    = '';
-  inp.style.height = 'auto';
-
-  const profile = getProfile() || {};
-  setTimeout(() => {
-    if (profile.name) {
-      convData.name  = profile.name;
-      convData.email = profile.email || '';
-      _convBotMsg(`Welcome back, <strong>${esc(profile.name)}</strong>! I'll connect you with a Bradford Council staff member.<br>What is your enquiry about?`);
-      setTimeout(() => { convState = 'topic'; _showTopicChips(); }, 500);
-    } else {
-      convState = 'name';
-      _convBotMsg("Hi there! I'll connect you with a Bradford Council staff member.<br>To start, what's your <strong>full name</strong>?");
-      inp.disabled = false;
-      inp.focus();
-    }
-  }, 250);
+  // Legacy: now just shows handoff card inline
+  if (!_handoffPending && !_contactMode) _showHandoffCard();
 }
 
 function closeContact() {
-  document.getElementById('contact-panel').style.display = 'none';
-  if (contactPollTimer) { clearInterval(contactPollTimer); contactPollTimer = null; }
+  // No-op: contact is now part of main chat; keep background poll if session active
+  if (contactPollTimer) clearInterval(contactPollTimer);
+  if (contactSessionId && !contactClosed)
+    contactPollTimer = setInterval(_backgroundContactPoll, 5000);
 }
 
 // ── Bot message helpers ────────────────────────────────────────────────────
@@ -1426,6 +1629,8 @@ async function _submitConvContact() {
     contactSessionId = d.sessionId;
     contactLastMsgId = 0;
     contactClosed    = false;
+    _saveContactSession();
+    _requestNotificationPermission();
     setTimeout(() => startContactChat(d.sessionId, convData.name, convData.topic, convData.message), 800);
   } catch {
     const t = document.getElementById('conv-typing-dot');
@@ -1437,24 +1642,42 @@ async function _submitConvContact() {
   }
 }
 
+function _setContactRef(sessionId) {
+  const refEl = document.getElementById('contact-ref');
+  const ref2  = document.getElementById('contact-ref2');
+  const wrap  = document.getElementById('cch-ref-wrap');
+  if (refEl) refEl.textContent = sessionId;
+  if (ref2)  ref2.textContent  = sessionId;
+  if (wrap)  wrap.style.display = sessionId ? '' : 'none';
+}
+
 function startContactChat(sessionId, name, subject, initMessage) {
-  document.getElementById('contact-form-view').style.display = 'none';
+  // Clear any existing poll (background or foreground)
+  if (contactPollTimer) { clearInterval(contactPollTimer); contactPollTimer = null; }
+
+  document.getElementById('contact-conv-view').style.display = 'none';
   document.getElementById('contact-chat-view').style.display = 'flex';
-  document.getElementById('contact-ref').textContent  = sessionId;
-  document.getElementById('contact-ref2').textContent = sessionId;
+  _setContactRef(sessionId);
+  _cachedMessages = [];
+  _saveContactSession();
 
+  // Show waiting banner + the citizen's own message immediately
   const msgsEl = document.getElementById('contact-msgs');
-  msgsEl.innerHTML = `
-    <div class="contact-waiting">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      <div><strong>Your message has been received.</strong></div>
-      <div>A council staff member will reply shortly.</div>
-      <div style="font-size:.72rem;margin-top:6px">Reference: <strong>${sessionId}</strong></div>
-    </div>`;
-
-  appendContactMsg('citizen', name, initMessage);
+  msgsEl.innerHTML = '';
+  const waiting = document.createElement('div');
+  waiting.className = 'contact-waiting';
+  waiting.innerHTML = `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    <div><strong>Message received.</strong></div>
+    <div>A council staff member will reply shortly.</div>
+    <div style="font-size:.72rem;margin-top:6px">Ref: <strong>${sessionId}</strong></div>`;
+  msgsEl.appendChild(waiting);
 
   contactLastMsgId = 0;
+  _shownMsgIds = new Set();
+
+  // Run immediately then every 2.5s
+  pollContactMessages();
   contactPollTimer = setInterval(pollContactMessages, 2500);
 }
 
@@ -1466,14 +1689,26 @@ async function pollContactMessages() {
     const d = await r.json();
 
     d.messages.forEach(m => {
+      if (_shownMsgIds.has(m.id)) { contactLastMsgId = Math.max(contactLastMsgId, m.id); return; }
+      _shownMsgIds.add(m.id);
+      _cachedMessages.push({ id: m.id, sender: m.sender, senderName: m.senderName, content: m.content, timestamp: m.timestamp });
+      appendContactMsg(m.sender, m.senderName, m.content, m.timestamp);
+      contactLastMsgId = Math.max(contactLastMsgId, m.id);
       if (m.sender === 'admin') {
-        appendContactMsg('admin', m.senderName, m.content, m.timestamp);
-        // Remove waiting message on first admin reply
         const waiting = document.querySelector('.contact-waiting');
         if (waiting) waiting.remove();
+        // Update header staff label on first admin reply
+        const lbl = document.getElementById('cch-staff-label');
+        if (lbl && lbl.textContent === 'Staff Support Chat') lbl.textContent = `${m.senderName} is helping you`;
+        if (_contactMode) {
+          const lbl2 = document.getElementById('cch-staff-label');
+          // won't exist in new design, ignore
+        }
+        _currentStaffName = m.senderName;
+        if (document.hidden) _showContactNotification(m.senderName, m.content);
       }
-      contactLastMsgId = Math.max(contactLastMsgId, m.id);
     });
+    if (d.messages.length > 0) _saveContactSession();
 
     // Update status badge
     const badge = document.getElementById('contact-status-label');
@@ -1490,12 +1725,53 @@ async function pollContactMessages() {
       appendContactSystemMsg('This session has been closed by staff. Thank you for contacting Bradford Council.');
       document.getElementById('contact-input').disabled = true;
       document.querySelector('.contact-send-btn').disabled = true;
+      _saveContactSession({ closed: true });
     }
   } catch {}
 }
 
 function _renderMsgContent(text) {
   if (!text) return '';
+  // Feedback request card
+  const fbMatch = text.match(/\[FEEDBACK_REQUEST:([^:]+):([^\]]+)\]/);
+  if (fbMatch) {
+    const adminUsername = fbMatch[1];
+    const adminName     = fbMatch[2];
+    const cardId = 'fb_' + Math.random().toString(36).slice(2, 8);
+    setTimeout(() => _initFeedbackCard(cardId, adminUsername, adminName), 50);
+    return `<div class="fb-card" id="${cardId}">
+      <div class="fb-card-title">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        Rate Your Experience
+      </div>
+      <div class="fb-card-sub">How was your support from <strong>${escapeHtml(adminName)}</strong> today?</div>
+      <div class="fb-stars" id="${cardId}_stars">
+        ${[1,2,3,4,5].map(i => `<button class="fb-star" data-v="${i}" onclick="_fbPickStar('${cardId}',${i})">★</button>`).join('')}
+      </div>
+      <textarea class="fb-comment" id="${cardId}_comment" placeholder="Leave a comment (optional)…" rows="2"></textarea>
+      <button class="fb-submit" id="${cardId}_btn" onclick="_fbSubmit('${cardId}','${escapeHtml(adminUsername)}')">Submit Feedback</button>
+      <div class="fb-error" id="${cardId}_err" style="display:none"></div>
+    </div>`;
+  }
+  if (text.includes('[POSTCODE_REQUEST]')) {
+    const cardId = 'pc_' + Math.random().toString(36).slice(2, 8);
+    return `<div class="postcode-card" id="${cardId}">
+      <div class="postcode-card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        Find Your Address
+      </div>
+      <div class="postcode-card-sub">Enter your postcode to select your address</div>
+      <div class="postcode-card-row">
+        <input class="postcode-card-inp" id="${cardId}_inp" placeholder="e.g. BD1 1NZ" maxlength="10" autocomplete="postal-code"
+          oninput="this.value=this.value.toUpperCase()"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();_postcodeSearch('${cardId}')}">
+        <button class="postcode-card-btn" id="${cardId}_btn" onclick="_postcodeSearch('${cardId}')">Find</button>
+      </div>
+      <div id="${cardId}_results"></div>
+      <div class="postcode-card-err" id="${cardId}_err" style="display:none"></div>
+    </div>`;
+  }
+
   const parts = text.split(/(\[IMG\][\s\S]*?\[\/IMG\])/);
   return parts.map(p => {
     if (p.startsWith('[IMG]') && p.endsWith('[/IMG]')) {
@@ -1504,6 +1780,361 @@ function _renderMsgContent(text) {
     }
     return escapeHtml(p).replace(/\n/g, '<br>');
   }).join('');
+}
+
+let _fbSelected = {};
+function _initFeedbackCard(id) { _fbSelected[id] = 0; }
+function _fbPickStar(id, val) {
+  _fbSelected[id] = val;
+  document.querySelectorAll(`#${id}_stars .fb-star`).forEach((btn, i) => {
+    btn.classList.toggle('active', i < val);
+  });
+}
+async function _fbSubmit(id, adminUsername) {
+  const stars   = _fbSelected[id] || 0;
+  const comment = document.getElementById(`${id}_comment`)?.value.trim() || '';
+  const errEl   = document.getElementById(`${id}_err`);
+  const btn     = document.getElementById(`${id}_btn`);
+  if (stars === 0) { errEl.textContent = 'Please select a star rating.'; errEl.style.display = ''; return; }
+  errEl.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  try {
+    const r = await fetch(`${CONTACT_API}/${contactSessionId}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stars, comment, adminUsername })
+    });
+    if (!r.ok) throw new Error();
+    // Replace card with thank-you
+    const card = document.getElementById(id);
+    if (card) {
+      card.innerHTML = `
+        <div class="fb-done">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><polyline points="20 6 9 17 4 12"/></svg>
+          <div>
+            <strong>Thank you for your feedback!</strong>
+            <div style="font-size:.8rem;margin-top:3px">${stars} star${stars !== 1 ? 's' : ''} — ${comment || 'No comment'}</div>
+          </div>
+        </div>`;
+    }
+  } catch {
+    errEl.textContent = 'Failed to submit. Please try again.'; errEl.style.display = '';
+    btn.disabled = false; btn.textContent = 'Submit Feedback';
+  }
+}
+
+async function _postcodeSearch(cardId) {
+  const inp     = document.getElementById(`${cardId}_inp`);
+  const btn     = document.getElementById(`${cardId}_btn`);
+  const results = document.getElementById(`${cardId}_results`);
+  const errEl   = document.getElementById(`${cardId}_err`);
+  if (!inp) return;
+  const postcode = inp.value.trim().toUpperCase();
+  if (!postcode) { errEl.textContent = 'Please enter a postcode.'; errEl.style.display = ''; return; }
+  errEl.style.display = 'none';
+  btn.disabled = true; btn.textContent = '…';
+  results.innerHTML = '<div style="font-size:.78rem;color:#64748b;padding:8px 0 4px">Searching…</div>';
+  try {
+    const r = await fetch(`${CONTACT_API}/address?postcode=${encodeURIComponent(postcode)}`);
+    const d = r.ok ? await r.json() : null;
+    const addrs = d?.addresses;
+    if (!addrs || !addrs.length) {
+      results.innerHTML = '';
+      errEl.textContent = `No addresses found for ${postcode}. Please check and try again.`;
+      errEl.style.display = '';
+      btn.disabled = false; btn.textContent = 'Find';
+      return;
+    }
+    results.innerHTML = `<div class="pc-addr-list">${
+      addrs.map((a, i) => `<button class="pc-addr-item" onclick="_selectAddress('${cardId}',this.dataset.v)" data-v="${escapeHtml(`${a.line1}, ${a.city}, ${a.postcode}`)}">
+        <span class="pc-addr-num">${i+1}</span>
+        <span>${escapeHtml(a.line1)}, ${escapeHtml(a.city)}, ${escapeHtml(a.postcode)}</span>
+      </button>`).join('')
+    }</div>`;
+    btn.disabled = false; btn.textContent = 'Find';
+  } catch {
+    results.innerHTML = '';
+    errEl.textContent = 'Could not reach address service. Please try again.';
+    errEl.style.display = '';
+    btn.disabled = false; btn.textContent = 'Find';
+  }
+}
+
+async function _selectAddress(cardId, addressText) {
+  const card = document.getElementById(cardId);
+  if (card) {
+    card.innerHTML = `<div class="postcode-card-done">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><polyline points="20 6 9 17 4 12"/></svg>
+      <div><strong>Address confirmed</strong><br><span style="font-size:.8rem;color:#15803d">${escapeHtml(addressText)}</span></div>
+    </div>`;
+  }
+  if (contactSessionId && !contactClosed) {
+    try {
+      await fetch(`${CONTACT_API}/${contactSessionId}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: `My address is: ${addressText}` })
+      });
+      await pollContactMessages();
+    } catch {}
+  }
+}
+
+let _currentStaffName = '';
+
+function _setLiveMode(sessionId, staffName) {
+  _contactMode = true;
+  const nameEl = document.getElementById('ch-name-id');
+  if (nameEl) nameEl.innerHTML = `Council Staff <span class="ch-live-badge">LIVE</span>`;
+  const sub = document.querySelector('.ch-subtitle');
+  if (sub) sub.textContent = `Ref: ${sessionId} · A staff member is helping you`;
+  const inp = document.getElementById('chat-input');
+  if (inp) inp.placeholder = 'Message council staff…';
+}
+
+function _endLiveMode() {
+  _contactMode    = false;
+  _handoffPending = false;
+  const nameEl = document.getElementById('ch-name-id');
+  if (nameEl) nameEl.textContent = 'Bradford Council Assistant';
+  const sub = document.querySelector('.ch-subtitle');
+  if (sub) sub.textContent = 'Live guidance & service support';
+  const inp = document.getElementById('chat-input');
+  if (inp) inp.placeholder = 'Ask me anything about Bradford Council…';
+}
+
+function _showHandoffCard() {
+  if (_handoffPending || _contactMode) return;
+  _handoffPending = true;
+  const msgs = document.getElementById('chat-msgs');
+  const div  = document.createElement('div');
+  div.className = 'msg-row alex-row';
+  div.id = 'handoff-card';
+  div.innerHTML = `
+    <div class="alex-ava">${ALEX_ICON}</div>
+    <div style="display:flex;flex-direction:column;gap:5px;flex:1;min-width:0">
+      <div class="bubble alex-bubble handoff-bubble" id="handoff-bubble">
+        <div class="handoff-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Connect to a Council Officer?
+        </div>
+        <p class="handoff-sub">Would you like this matter handled by a Bradford Council officer who can help directly?</p>
+        <div class="handoff-btns">
+          <button class="handoff-yes" id="hd-yes-btn">Yes, connect me</button>
+          <button class="handoff-no"  id="hd-no-btn">No, continue chat</button>
+        </div>
+      </div>
+      <span class="bubble-time">${now()}</span>
+    </div>`;
+  msgs.appendChild(div);
+
+  const bubbleEl = div.querySelector('.handoff-bubble');
+
+  div.querySelector('#hd-yes-btn').addEventListener('click', () => {
+    _handoffPending = false;
+    if (bubbleEl) bubbleEl.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;font-size:.83rem;color:#15803d">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><polyline points="20 6 9 17 4 12"/></svg>
+        Confirmed — connecting you with a council officer now.
+      </div>`;
+    // Send as a regular chat message so the AI collects their details naturally
+    doSend('Yes, I confirm that I want to contact Bradford Council and share my details so I can speak with a council officer.');
+  });
+
+  div.querySelector('#hd-no-btn').addEventListener('click', () => _declineHandoff(bubbleEl));
+  scrollEnd();
+}
+
+function _declineHandoff(bubble) {
+  _handoffPending = false;
+  if (!bubble) bubble = document.getElementById('handoff-bubble');
+  if (bubble) bubble.innerHTML = `<span style="font-size:.83rem;color:#64748b">No problem — I'll continue helping you here.</span>`;
+}
+
+function _confirmHandoff(bubble) {
+  if (!bubble) bubble = document.getElementById('handoff-bubble');
+  if (!bubble) return;
+  const profile = getProfile() || {};
+
+  // Build options HTML separately to avoid any template-literal issues
+  const topicOptions = CONTACT_TOPICS
+    .map(t => `<option value="${t.replace(/"/g,'&quot;')}">${t}</option>`)
+    .join('');
+
+  bubble.innerHTML = `
+    <div class="handoff-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Just a few details
+    </div>
+    <div class="handoff-form">
+      <div class="hf-label">Your name *</div>
+      <input id="hf-name"  class="handoff-inp" placeholder="e.g. John Smith" value="${(profile.name  || '').replace(/"/g,'&quot;')}">
+      <div class="hf-label">Which department? *</div>
+      <select id="hf-topic" class="handoff-inp">
+        <option value="">Select a department…</option>
+        ${topicOptions}
+      </select>
+      <div class="hf-label">Email address *</div>
+      <input id="hf-email" class="handoff-inp" placeholder="your@email.com" type="email" value="${(profile.email || '').replace(/"/g,'&quot;')}">
+      <div class="hf-label">Phone number <span style="font-weight:400;opacity:.6">(optional)</span></div>
+      <input id="hf-phone" class="handoff-inp" placeholder="07xxx xxxxxx" type="tel">
+      <div id="hf-err" class="handoff-err" style="display:none"></div>
+      <button class="handoff-yes" id="hf-connect-btn">Connect Me Now</button>
+    </div>`;
+
+  // Wire events directly on the bubble's elements
+  bubble.querySelector('#hf-connect-btn').addEventListener('click', _submitHandoff);
+  bubble.querySelectorAll('.handoff-inp').forEach(el =>
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') _submitHandoff(); })
+  );
+
+  // Scroll the card into view
+  const card = document.getElementById('handoff-card');
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  setTimeout(() => document.getElementById('hf-name')?.focus(), 200);
+}
+
+async function _submitHandoff() {
+  const name  = document.getElementById('hf-name')?.value.trim();
+  const email = document.getElementById('hf-email')?.value.trim();
+  const phone = document.getElementById('hf-phone')?.value.trim();
+  const topic = document.getElementById('hf-topic')?.value || 'Other';
+  const errEl = document.getElementById('hf-err');
+  if (!name)              { errEl.textContent = 'Please enter your full name.';        errEl.style.display = ''; return; }
+  if (!email?.includes('@')) { errEl.textContent = 'Please enter a valid email address.'; errEl.style.display = ''; return; }
+  errEl.style.display = 'none';
+
+  const btn = document.getElementById('hf-connect-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
+
+  // Save email to profile
+  const existing = getProfile() || {};
+  saveProfile({ ...existing, name, email });
+
+  // Build chat context for admin
+  const ctxLines = [];
+  document.querySelectorAll('#chat-msgs .msg-row').forEach(row => {
+    const isUser = row.classList.contains('user-row');
+    const b = row.querySelector('.bubble');
+    if (!b || row.id === 'handoff-card') return;
+    const txt = b.textContent.trim().slice(0, 300);
+    if (txt) ctxLines.push((isUser ? 'Citizen: ' : 'AI: ') + txt);
+  });
+  const context = ctxLines.slice(-12).join('\n');
+
+  try {
+    const r = await fetch(`${CONTACT_API}/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name, email,
+        phone:   phone || null,
+        subject: topic,
+        message: context ? `[AI conversation context]\n${context}\n[End context]` : `Contact request from ${name}`
+      })
+    });
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+
+    contactSessionId = d.sessionId;
+    contactLastMsgId = 0;
+    contactClosed    = false;
+    _cachedMessages  = [];
+    _shownMsgIds     = new Set();
+    _currentStaffName = '';
+    convData.name = name; convData.email = email; convData.topic = topic;
+    _saveContactSession({ contactMode: true });
+
+    const bubble = document.getElementById('handoff-bubble');
+    if (bubble) {
+      bubble.innerHTML = `
+        <div class="handoff-connected">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><polyline points="20 6 9 17 4 12"/></svg>
+          <div>
+            <strong>You're connected!</strong>
+            <div style="font-size:.77rem;margin-top:3px;opacity:.75">A council officer will reply shortly in this chat.<br>Reference: <strong>${d.sessionId}</strong></div>
+          </div>
+        </div>`;
+      bubble.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    _setLiveMode(d.sessionId, '');
+    if (contactPollTimer) clearInterval(contactPollTimer);
+    contactPollTimer = setInterval(_pollHandoffMessages, 2500);
+    _pollHandoffMessages();
+  } catch {
+    errEl.textContent = 'Connection failed. Please try again.';
+    errEl.style.display = '';
+    if (btn) { btn.disabled = false; btn.textContent = 'Connect Now'; }
+    _handoffPending = false;
+  }
+}
+
+async function _pollHandoffMessages() {
+  if (!contactSessionId || !_contactMode) return;
+  try {
+    const r = await fetch(`${CONTACT_API}/${contactSessionId}/messages?after=${contactLastMsgId}`);
+    if (!r.ok) return;
+    const d = await r.json();
+
+    d.messages.forEach(m => {
+      if (_shownMsgIds.has(m.id)) { contactLastMsgId = Math.max(contactLastMsgId, m.id); return; }
+      _shownMsgIds.add(m.id);
+      _cachedMessages.push({ id: m.id, sender: m.sender, senderName: m.senderName, content: m.content, timestamp: m.timestamp });
+      contactLastMsgId = Math.max(contactLastMsgId, m.id);
+
+      if (m.sender === 'admin') {
+        _currentStaffName = m.senderName;
+        _addStaffMessage(m.senderName, m.content, m.timestamp);
+        // Update live badge subtitle with staff name
+        const sub = document.querySelector('.ch-subtitle');
+        if (sub) sub.textContent = `Ref: ${contactSessionId} · ${m.senderName} is helping you`;
+        if (document.hidden) _showContactNotification(m.senderName, m.content);
+      }
+    });
+
+    if (d.messages.length > 0) _saveContactSession({ contactMode: true, staffName: _currentStaffName });
+
+    if (d.status === 'closed' && !contactClosed) {
+      contactClosed = true;
+      clearInterval(contactPollTimer); contactPollTimer = null;
+      _endLiveMode();
+      // Add system message in main chat
+      const msgs = document.getElementById('chat-msgs');
+      const sys  = document.createElement('div');
+      sys.style.cssText = 'text-align:center;padding:10px;font-size:.76rem;color:#94a3b8;font-style:italic';
+      sys.textContent = 'This live support session has been closed by staff. You can continue chatting with the AI assistant.';
+      msgs.appendChild(sys);
+      scrollEnd();
+      _saveContactSession({ contactMode: false, closed: true });
+    }
+  } catch {}
+}
+
+function _addStaffMessage(staffName, content, timestamp) {
+  const msgs  = document.getElementById('chat-msgs');
+  if (!msgs) return;
+  const time  = timestamp
+    ? new Date(timestamp).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' })
+    : now();
+  const avaId = 'sav_' + Math.random().toString(36).slice(2, 8);
+  const color = _adminAvaColor(staffName);
+  const div   = document.createElement('div');
+  div.className = 'msg-row alex-row staff-row';
+  div.innerHTML = `
+    <div class="staff-ava" id="${avaId}" style="background:${color}">${staffName.charAt(0).toUpperCase()}</div>
+    <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0">
+      <div class="staff-name-lbl">${escapeHtml(staffName)} <span class="staff-badge">Staff</span></div>
+      <div class="bubble staff-bubble">${_renderMsgContent(content)}</div>
+      <span class="bubble-time">${time}</span>
+    </div>`;
+  msgs.appendChild(div);
+  scrollEnd();
+  _getAdminAvatar(staffName).then(url => {
+    if (!url) return;
+    const el = document.getElementById(avaId);
+    if (el) { el.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`; el.style.background = 'transparent'; }
+  });
 }
 
 function attachContactImage(input) {
@@ -1532,11 +2163,54 @@ function clearContactAttach() {
 }
 
 function appendContactMsg(sender, senderName, content, timestamp) {
+  // In live-support mode, admin messages go into the main AI chat
+  if (_contactMode && sender === 'admin') {
+    _addStaffMessage(senderName, content, timestamp);
+    return;
+  }
+  // In live-support mode, skip re-rendering own citizen messages (already shown optimistically)
+  if (_contactMode && sender === 'citizen') return;
+
   const msgsEl = document.getElementById('contact-msgs');
   const time   = timestamp ? new Date(timestamp).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' }) : new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
-  const div = document.createElement('div');
-  div.className = 'contact-msg ' + sender;
-  div.innerHTML = `<div class="contact-bubble">${_renderMsgContent(content)}</div><div class="contact-msg-meta">${sender === 'admin' ? escapeHtml(senderName) + ' · ' : ''}${time}</div>`;
+  const div    = document.createElement('div');
+
+  // Special cards (feedback / postcode) render full-width outside any bubble
+  if (content && (content.includes('[FEEDBACK_REQUEST:') || content.includes('[POSTCODE_REQUEST]'))) {
+    div.className = 'contact-msg-feedback-wrap';
+    div.innerHTML = _renderMsgContent(content);
+    msgsEl.appendChild(div);
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+    return;
+  }
+
+  if (sender === 'admin') {
+    const avaId  = 'cav_' + Math.random().toString(36).slice(2, 8);
+    const color  = _adminAvaColor(senderName);
+    const letter = senderName.charAt(0).toUpperCase();
+    div.className = 'contact-msg admin';
+    div.innerHTML = `
+      <div class="contact-admin-row">
+        <div class="contact-admin-ava" id="${avaId}" style="background:${color}">${letter}</div>
+        <div class="contact-admin-content">
+          <div class="contact-admin-name">${escapeHtml(senderName)}</div>
+          <div class="contact-bubble">${_renderMsgContent(content)}</div>
+          <div class="contact-msg-meta">${time}</div>
+        </div>
+      </div>`;
+    _getAdminAvatar(senderName).then(url => {
+      if (!url) return;
+      const el = document.getElementById(avaId);
+      if (el) { el.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`; el.style.background = 'transparent'; }
+    });
+  } else if (sender === 'system') {
+    div.style.cssText = 'text-align:center;padding:6px 12px;font-size:.72rem;color:#94a3b8;font-style:italic;align-self:center';
+    div.textContent = content;
+  } else {
+    div.className = 'contact-msg citizen';
+    div.innerHTML = `<div class="contact-bubble">${_renderMsgContent(content)}</div><div class="contact-msg-meta">${time}</div>`;
+  }
+
   msgsEl.appendChild(div);
   msgsEl.scrollTop = msgsEl.scrollHeight;
 }
@@ -1562,14 +2236,13 @@ async function sendContactMessage() {
     clearContactAttach();
   }
 
-  appendContactMsg('citizen', convData.name || 'You', content);
-
   try {
     await fetch(`${CONTACT_API}/${contactSessionId}/message`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content })
     });
+    await pollContactMessages();
   } catch {}
 }
 

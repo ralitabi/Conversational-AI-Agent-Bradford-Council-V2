@@ -75,20 +75,23 @@ builder.Services.AddCors(opt =>
               .AllowAnyHeader()
     ));
 
-// Rate limiting — 30 requests per minute per IP (prevents runaway API cost)
+// Rate limiting — higher limit for authenticated admin requests, standard for citizens
 builder.Services.AddRateLimiter(options =>
 {
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
     {
-        // X-Forwarded-For must be checked first — on Railway, RemoteIpAddress
-        // is always the proxy's internal IP, not the real client IP.
         var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
                  ?? ctx.Connection.RemoteIpAddress?.ToString()
                  ?? "unknown";
-        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        // Authenticated admin requests get 300/min (polling-heavy); citizens get 30/min
+        var isAdmin = ctx.Request.Headers["Authorization"].FirstOrDefault()
+                          ?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true;
+        var key   = (isAdmin ? "adm:" : "cit:") + ip;
+        var limit = isAdmin ? 300 : 30;
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
         {
             AutoReplenishment = true,
-            PermitLimit       = 30,
+            PermitLimit       = limit,
             Window            = TimeSpan.FromMinutes(1)
         });
     });

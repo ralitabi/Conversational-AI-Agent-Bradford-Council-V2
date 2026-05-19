@@ -83,11 +83,12 @@ builder.Services.AddRateLimiter(options =>
         var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
                  ?? ctx.Connection.RemoteIpAddress?.ToString()
                  ?? "unknown";
-        // Authenticated admin requests get 300/min (polling-heavy); citizens get 30/min
-        var isAdmin = ctx.Request.Headers["Authorization"].FirstOrDefault()
-                          ?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true;
-        var key   = (isAdmin ? "adm:" : "cit:") + ip;
-        var limit = isAdmin ? 300 : 30;
+        // Authenticated admin requests get 300/min; contact polling (no auth) gets 120/min; everything else 30/min
+        var isAdmin   = ctx.Request.Headers["Authorization"].FirstOrDefault()
+                            ?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true;
+        var isContact = ctx.Request.Path.StartsWithSegments("/api/contact");
+        var key   = (isAdmin ? "adm:" : isContact ? "con:" : "cit:") + ip;
+        var limit = isAdmin ? 300 : isContact ? 120 : 30;
         return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
         {
             AutoReplenishment = true,
